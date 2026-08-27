@@ -1,0 +1,14 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# Build scripts are opt-in. `sharp` gets enabled when the Phase 2 image pipeline lands.
+allowBuilds:
+  # esbuild ships prebuilt binaries via its install script — required by vitest, tsx
+  # and drizzle-kit.
+  esbuild: true
+  sharp: false
+  unrs-resolver: false
+
+minimumReleaseAgeExclude:
+  - lint-staged@17.4.1

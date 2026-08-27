@@ -1,0 +1,10 @@
+# Normalize line endings: LF in the repository, native in the working copy.
+# CI runs on Linux, so this keeps diffs and lint results identical everywhere.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.webp binary
+*.avif binary
+*.ico binary
+*.woff2 binary

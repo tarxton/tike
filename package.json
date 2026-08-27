@@ -1,0 +1,48 @@
+{
+  "name": "tike",
+  "private": true,
+  "packageManager": "pnpm@11.21.0",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "eslint . --max-warnings 0 && pnpm --filter @tike/web lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "e2e": "turbo run e2e",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @tike/db generate",
+    "db:migrate": "pnpm --filter @tike/db migrate",
+    "db:studio": "pnpm --filter @tike/db studio",
+    "crawl": "pnpm --filter @tike/jobs crawl",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
+    "@eslint/js": "~9.39.5",
+    "eslint": "~9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "typescript-eslint": "^8.68.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.4.1",
+    "prettier": "^3.6.2",
+    "prettier-plugin-tailwindcss": "^0.7.2",
+    "turbo": "^2.6.3",
+    "typescript": "^5.9.3"
+  },
+  "lint-staged": {
+    "*.{js,jsx,mjs,ts,tsx,json,css,md,yaml,yml}": [
+      "prettier --write"
+    ],
+    "!(apps/web)/**/*.{js,jsx,mjs,ts,tsx}": [
+      "eslint --fix --no-warn-ignored"
+    ],
+    "apps/web/**/*.{js,jsx,ts,tsx}": [
+      "pnpm --filter @tike/web exec eslint --fix"
+    ]
+  }
+}
