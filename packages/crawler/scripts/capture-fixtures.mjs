@@ -32,6 +32,37 @@ const count = Number(countRaw ?? 5);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Shop pages embed third-party credentials in plain sight — Google Maps browser keys,
+ * analytics ids, chat-widget tokens. They are public on the shop's own site, but this
+ * repository must not republish someone else's key: it trips secret scanners and, if
+ * the key lacks referrer restrictions, widens the shop's exposure.
+ *
+ * Redaction happens at capture time so an unredacted fixture can never be written to
+ * disk in the first place. None of these values affect parsing.
+ */
+const REDACTIONS = [
+  // Google API keys (Maps, reCAPTCHA, …)
+  [/AIza[0-9A-Za-z_-]{35}/g, 'AIza_REDACTED_FIXTURE_KEY'],
+  // Stripe, GitHub, Slack tokens, in case a shop leaks a real one
+  [/sk_live_[A-Za-z0-9]{16,}/g, 'sk_live_REDACTED'],
+  [/gh[pousr]_[A-Za-z0-9]{20,}/g, 'ghp_REDACTED'],
+  [/xox[baprs]-[A-Za-z0-9-]{10,}/g, 'xoxb-REDACTED'],
+  [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, 'REDACTED-KEY'],
+];
+
+function redact(html) {
+  let out = html;
+  let count = 0;
+  for (const [pattern, replacement] of REDACTIONS) {
+    out = out.replace(pattern, () => {
+      count += 1;
+      return replacement;
+    });
+  }
+  return { html: out, count };
+}
+
 async function fetchText(url) {
   const res = await fetch(url, { headers: { 'user-agent': USER_AGENT } });
   if (res.status === 403) {
@@ -73,11 +104,15 @@ for (const [i, url] of picked.entries()) {
     continue;
   }
   await sleep(delayMs);
-  const html = await fetchText(url);
+  const raw = await fetchText(url);
+  const { html, count } = redact(raw);
   const name = `${String(i + 1).padStart(2, '0')}.html`;
   await writeFile(join(outDir, name), html, 'utf8');
   manifest.push({ file: name, url });
-  console.log(`saved ${name}  ${(html.length / 1024).toFixed(0)}kb  ${url}`);
+  console.log(
+    `saved ${name}  ${(html.length / 1024).toFixed(0)}kb  ` +
+      `${count ? `[${count} redacted] ` : ''}${url}`,
+  );
 }
 
 await writeFile(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');

@@ -1,0 +1,69 @@
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  fixtures:
+    name: Fixtures carry no live credentials
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+
+      # Captured shop pages embed third-party keys. The capture script redacts them,
+      # but a fixture added by hand would bypass that, so the rule is enforced here too.
+      - name: Scan fixtures
+        run: |
+          set -euo pipefail
+          if [ ! -d packages/crawler/fixtures ]; then
+            echo "no fixtures directory; nothing to scan"
+            exit 0
+          fi
+          # Google API keys, excluding the documented redaction placeholder.
+          if grep -rEn 'AIza[0-9A-Za-z_-]{35}' packages/crawler/fixtures \
+             | grep -v 'AIza_REDACTED_FIXTURE_KEY'; then
+            echo "::error::Unredacted Google API key found in fixtures."
+            exit 1
+          fi
+          if grep -rEn 'sk_live_[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|BEGIN [A-Z ]*PRIVATE KEY' \
+             packages/crawler/fixtures; then
+            echo "::error::Credential-shaped string found in fixtures."
+            exit 1
+          fi
+          echo "fixtures clean"
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level high
