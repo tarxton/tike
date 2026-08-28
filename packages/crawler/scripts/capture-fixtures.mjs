@@ -44,6 +44,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const REDACTIONS = [
   // Google API keys (Maps, reCAPTCHA, …)
   [/AIza[0-9A-Za-z_-]{35}/g, 'AIza_REDACTED_FIXTURE_KEY'],
+  // JWTs — shops embed player and widget tokens (Flowplayer, chat) in page source.
+  [/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g, 'eyJ_REDACTED_FIXTURE_TOKEN'],
   // Stripe, GitHub, Slack tokens, in case a shop leaks a real one
   [/sk_live_[A-Za-z0-9]{16,}/g, 'sk_live_REDACTED'],
   [/gh[pousr]_[A-Za-z0-9]{20,}/g, 'ghp_REDACTED'],

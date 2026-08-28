@@ -48,7 +48,8 @@ jobs:
             echo "::error::Unredacted Google API key found in fixtures."
             exit 1
           fi
-          if grep -rEn 'sk_live_[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|BEGIN [A-Z ]*PRIVATE KEY' \
+          # JWTs (player/widget tokens), payment and VCS tokens, private keys.
+          if grep -rEn 'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}|sk_live_[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|BEGIN [A-Z ]*PRIVATE KEY' \
              packages/crawler/fixtures; then
             echo "::error::Credential-shaped string found in fixtures."
             exit 1
