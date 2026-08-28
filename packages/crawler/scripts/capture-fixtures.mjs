@@ -17,6 +17,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import robotsParser from 'robots-parser';
+import { sanitizeFixture } from './sanitize-fixture.mjs';
 
 const USER_AGENT = 'tike-bot/0.1 (+https://github.com/tarxton/tike; fixture capture)';
 const DEFAULT_DELAY_MS = 1200;
@@ -107,7 +108,10 @@ for (const [i, url] of picked.entries()) {
   }
   await sleep(delayMs);
   const raw = await fetchText(url);
-  const { html, count } = redact(raw);
+  // Strip to the parsed subset first — that removes every inline script, and with it
+  // the shop's embedded credentials. Redaction then runs as a second line of defence
+  // over what little markup remains.
+  const { html, count } = redact(sanitizeFixture(raw));
   const name = `${String(i + 1).padStart(2, '0')}.html`;
   await writeFile(join(outDir, name), html, 'utf8');
   manifest.push({ file: name, url });
