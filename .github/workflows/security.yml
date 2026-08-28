@@ -41,9 +41,10 @@ jobs:
             echo "no fixtures directory; nothing to scan"
             exit 0
           fi
-          # Google API keys, excluding the documented redaction placeholder.
-          if grep -rEn 'AIza[0-9A-Za-z_-]{35}' packages/crawler/fixtures \
-             | grep -v 'AIza_REDACTED_FIXTURE_KEY'; then
+          # Google API keys. The redaction placeholder is deliberately shorter than the
+          # 35-character key body, so it does not match this pattern at all — an earlier
+          # placeholder did, and tripped gitleaks on the redaction itself.
+          if grep -rEn 'AIza[0-9A-Za-z_-]{35}' packages/crawler/fixtures; then
             echo "::error::Unredacted Google API key found in fixtures."
             exit 1
           fi
