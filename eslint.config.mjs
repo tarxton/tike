@@ -14,6 +14,7 @@ export default tseslint.config(
       '**/.next/**',
       '**/.turbo/**',
       '**/coverage/**',
+      '**/scratch/**',
       'apps/web/**',
     ],
   },

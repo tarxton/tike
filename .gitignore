@@ -16,6 +16,9 @@ playwright-report/
 .env.*
 !.env.example
 
+# Neon CLI workspace link (project/branch IDs, machine-local)
+.neon
+
 *.log
 npm-debug.log*
 pnpm-debug.log*
