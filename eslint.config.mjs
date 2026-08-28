@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
+import globals from 'globals';
 
 /**
  * Root config: lints every workspace package except `apps/web`, which keeps
@@ -32,8 +33,10 @@ export default tseslint.config(
     },
   },
   {
-    // Jobs are CLI processes; console output is the interface.
-    files: ['apps/jobs/**/*.ts'],
+    // Jobs and maintenance scripts are CLI processes running on Node: console output
+    // is their interface, and they use Node/web globals directly.
+    files: ['apps/jobs/**/*.ts', '**/scripts/**/*.{ts,mjs,js}', '*.config.{ts,mjs,js}'],
+    languageOptions: { globals: { ...globals.node } },
     rules: { 'no-console': 'off' },
   },
   prettier,

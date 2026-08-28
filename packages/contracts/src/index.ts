@@ -11,10 +11,25 @@ export type Gender = z.infer<typeof genderSchema>;
 export const platformSchema = z.enum(['nbshop', 'magento2', 'woo', 'shopify', 'feed']);
 export type Platform = z.infer<typeof platformSchema>;
 
-/** One size row as scraped from a product page, before normalization. */
+/**
+ * One size row as scraped from a product page, before normalization.
+ *
+ * `euRaw` is the shop's own EU label ("41", "40 2/3"); normalization to a canonical
+ * number happens in @tike/core, not here — adapters extract, they do not interpret.
+ *
+ * `gtin` is present when the shop exposes a per-size barcode. NBSHOP does, in
+ * `data-combination-code`, which makes exact cross-shop matching possible without
+ * falling back to fuzzy similarity.
+ */
 export const rawSizeSchema = z.object({
   raw: z.string().min(1),
+  euRaw: z.string().nullable(),
+  usRaw: z.string().nullable(),
+  ukRaw: z.string().nullable(),
   inStock: z.boolean(),
+  gtin: z.string().nullable(),
+  /** Some shops price per size. Null means "use the offer price". */
+  priceRaw: z.string().nullable(),
 });
 export type RawSize = z.infer<typeof rawSizeSchema>;
 
@@ -23,21 +38,29 @@ export type RawSize = z.infer<typeof rawSizeSchema>;
  * product page, regardless of shop. Deliberately shop-agnostic — anything
  * shop-specific belongs in the adapter, not here.
  *
- * NOTE: this shape is a confirmation checkpoint. Every adapter inherits it, so it
- * gets reviewed before adapters are written against it.
+ * Adapters extract; they never normalize, convert or match. That keeps them small,
+ * testable against fixtures, and replaceable when a shop changes its markup.
  */
 export const parsedOfferSchema = z.object({
   url: z.url(),
+  /** The shop's own product id, unique within that shop. */
   externalId: z.string().min(1),
   title: z.string().min(1),
   brand: z.string().min(1).nullable(),
+  /** Manufacturer style code or the shop's SKU field, verbatim. */
   sku: z.string().nullable(),
   imageUrl: z.url().nullable(),
   priceRaw: z.string().min(1),
   originalPriceRaw: z.string().nullable(),
   currency: z.enum(['BAM', 'EUR']).default('BAM'),
   gender: genderSchema.nullable(),
-  /** Empty array is a parse failure, never an out-of-stock product. */
+  /**
+   * Every size the page lists, in stock or not — the out-of-stock ones are what tell
+   * a user "this shop has it, just not in your size".
+   *
+   * An empty array is a PARSE FAILURE, never an out-of-stock product. Callers must
+   * count it toward the crawl's failure budget rather than writing it to the database.
+   */
   sizes: z.array(rawSizeSchema),
 });
 export type ParsedOffer = z.infer<typeof parsedOfferSchema>;
