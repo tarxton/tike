@@ -1,0 +1,13 @@
+# Captured shop pages are byte-exact evidence, not source. Formatting them would
+# rewrite the markup the parser is tested against — and real shop HTML is often
+# invalid anyway (unbalanced </li>), which makes prettier fail outright.
+packages/crawler/fixtures/
+
+# Generated
+apps/web/next-env.d.ts
+pnpm-lock.yaml
+.next/
+.turbo/
+dist/
+coverage/
+packages/db/migrations/
