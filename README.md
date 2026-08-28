@@ -6,8 +6,8 @@ Most shoe searches start with a model and end in disappointment: the shoe exists
 your size. tike inverts that. Pick your size first, and only see what a BiH shop can actually
 sell you today — with prices compared across shops.
 
-> Status: early development. Phase 0 (foundations) complete; Phase 1 (first shop adapter and
-> the search loop) in progress.
+> Status: early development. Schema and the first platform adapter (NBSHOP, covering
+> multiple BiH retailers) are in place; ingestion and search are next.
 
 ## How it works
 
@@ -87,6 +87,24 @@ tike reads publicly available product pages from BiH retailers, and does so poli
 
 Shops are welcome to supply a product feed instead — it is more accurate for them and cheaper
 for everyone. See the contact page.
+
+## Design decisions
+
+Non-obvious choices are recorded in [`docs/adr/`](docs/adr), including the split between
+read and write database drivers, and why fixtures store parsed-content subsets rather
+than whole pages.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for commit conventions and the rules that apply to
+crawler and database changes.
+
+## Design decisions
+
+Non-obvious choices are recorded in [`docs/adr/`](docs/adr), including the split between
+read and write database drivers, and why fixtures store parsed-content subsets rather
+than whole pages.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for commit conventions and the rules that apply to
+crawler and database changes.
 
 ## Licence
 
