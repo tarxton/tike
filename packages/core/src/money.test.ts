@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { discountPercent, formatMoney, parsePrice, toEurMinor } from './money.js';
+import { discountPercent, formatMoney, parsePrice, toEurMinor } from './money';
 
 describe('parsePrice', () => {
   it('parses the BiH comma-decimal format', () => {

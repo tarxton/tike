@@ -1,9 +1,9 @@
 import type { ParsedOffer, Platform } from '@tike/contracts';
-import { parseNbshop } from './adapters/nbshop.js';
+import { parseNbshop } from './adapters/nbshop';
 
-export { parseNbshop, ParseError } from './adapters/nbshop.js';
-export { PoliteFetcher, ForbiddenError, RobotsDisallowedError, USER_AGENT } from './fetcher.js';
-export { parseSitemapLocs, isSitemapIndex, selectProductSitemap, filterByPath } from './sitemap.js';
+export { parseNbshop, ParseError } from './adapters/nbshop';
+export { PoliteFetcher, ForbiddenError, RobotsDisallowedError, USER_AGENT } from './fetcher';
+export { parseSitemapLocs, isSitemapIndex, selectProductSitemap, filterByPath } from './sitemap';
 
 /**
  * Every shop is onboarded through a platform adapter, never a bespoke scraper.

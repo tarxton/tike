@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  expandQuery,
-  extractStyleCode,
-  foldDiacritics,
-  normalizeForSearch,
-  slugify,
-} from './text.js';
+import { expandQuery, extractStyleCode, foldDiacritics, normalizeForSearch, slugify } from './text';
 
 describe('foldDiacritics', () => {
   it('folds every BCS diacritic', () => {

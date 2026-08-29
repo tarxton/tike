@@ -1,6 +1,6 @@
 import type { ParsedOffer, RawSize } from '@tike/contracts';
 import { describe, expect, it } from 'vitest';
-import { cleanModel, normalizeOffer, NormalizationError } from './normalize.js';
+import { cleanModel, normalizeOffer, NormalizationError } from './normalize';
 
 const size = (over: Partial<RawSize> = {}): RawSize => ({
   raw: '8',

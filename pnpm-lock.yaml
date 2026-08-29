@@ -81,6 +81,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@neondatabase/serverless':
+        specifier: ^1.0.2
+        version: 1.1.0
       '@tike/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -90,6 +93,9 @@ importers:
       '@tike/db':
         specifier: workspace:*
         version: link:../../packages/db
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@neondatabase/serverless@1.1.0)
       next:
         specifier: 16.3.3
         version: 16.3.3(@babel/core@7.29.7(supports-color@7.2.0))(@types/node@20.19.43)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)

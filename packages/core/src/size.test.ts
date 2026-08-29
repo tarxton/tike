@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { convertSize, parseEuSize } from './size.js';
+import { convertSize, parseEuSize } from './size';
 
 describe('parseEuSize', () => {
   it('parses a plain integer size', () => {

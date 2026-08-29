@@ -1,5 +1,5 @@
-import { shop } from './schema.js';
-import { withDb } from './write-client.js';
+import { shop } from './schema';
+import { withDb } from './write-client';
 
 /**
  * Seed the shops tike crawls. Idempotent: re-running updates the existing rows

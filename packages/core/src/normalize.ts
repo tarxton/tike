@@ -1,7 +1,7 @@
 import type { ParsedOffer } from '@tike/contracts';
-import { parsePrice, type Currency, type Money } from './money.js';
-import { convertSize, parseEuSize, type Gender } from './size.js';
-import { normalizeForSearch, slugify } from './text.js';
+import { parsePrice, type Currency, type Money } from './money';
+import { convertSize, parseEuSize, type Gender } from './size';
+import { normalizeForSearch, slugify } from './text';
 
 /**
  * Turns raw adapter output into the shapes the database stores.
