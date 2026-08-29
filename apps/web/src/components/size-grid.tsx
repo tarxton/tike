@@ -15,11 +15,14 @@ export function SizeGrid({
   selected,
   showKids = false,
   kidsHref,
+  query,
 }: {
   sizes: number[];
   selected: number[];
   showKids?: boolean;
   kidsHref: string;
+  /** Carried through so changing size does not discard an active model search. */
+  query?: string;
 }) {
   const visible = showKids ? sizes : sizes.filter((s) => s >= ADULT_MIN_SIZE);
   const kidsCount = sizes.filter((s) => s < ADULT_MIN_SIZE).length;
@@ -30,6 +33,7 @@ export function SizeGrid({
       <form action={toggleSize} className="flex flex-wrap gap-2">
         <input type="hidden" name="current" value={current} />
         <input type="hidden" name="kids" value={showKids ? '1' : '0'} />
+        {query ? <input type="hidden" name="q" value={query} /> : null}
 
         {visible.map((size) => {
           const isSelected = selected.includes(size);

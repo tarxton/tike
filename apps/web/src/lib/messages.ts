@@ -21,11 +21,15 @@ export const t = {
   oldPrice: 'Stara cijena',
 
   search: 'Pretraži',
-  searchPlaceholder: 'npr. air force, adidas, nike',
+  searchPlaceholder: 'npr. air force, dunk, samba',
+  resultsFor: 'Rezultati za',
+  clearSearch: 'poništi pretragu',
+  orBrowseBySize: 'ili samo odaberi svoj broj',
   brand: 'Brend',
   allBrands: 'Svi brendovi',
 
   results: 'rezultata',
+  resultOne: 'rezultat',
   noResults: 'Nema patika u tom broju.',
   noResultsHint: 'Probaj drugi broj ili obriši filtere.',
   clearFilters: 'Obriši filtere',
@@ -37,6 +41,18 @@ export const t = {
 
   footerAbout: 'tike pretražuje ponudu BiH prodavnica. Ne prodajemo obuću.',
 } as const;
+
+/**
+ * BCS plural for "rezultat".
+ *
+ * The singular is used for any count ending in 1 except 11 — so 1 and 21 rezultat,
+ * but 11 rezultata. Everything else takes the same genitive form.
+ */
+export function pluralResults(count: number): string {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  return last === 1 && lastTwo !== 11 ? t.resultOne : t.results;
+}
 
 /** "12990" -> "129,90 KM" */
 export function formatPrice(minor: number, currency: string): string {

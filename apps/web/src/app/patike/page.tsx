@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { availableBrands, availableSizes, searchOffers } from '@tike/db';
 import { OfferCard } from '@/components/offer-card';
+import { SearchBar } from '@/components/search-bar';
 import { SizeGrid } from '@/components/size-grid';
-import { formatSize, t } from '@/lib/messages';
+import { formatSize, pluralResults, t } from '@/lib/messages';
 import { getSizes } from '@/lib/size';
 import { parseSizes } from '@/lib/sizes';
 
@@ -47,13 +48,14 @@ export default async function Results({
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
-      <header className="mb-6 flex flex-wrap items-baseline justify-between gap-3">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <Link href="/" className="text-xl font-semibold tracking-tight text-neutral-900">
           {t.siteName}
         </Link>
+        <SearchBar defaultValue={query} sizes={selected} showKids={showKids} />
         <p className="text-sm text-neutral-600">
           <strong className="font-semibold text-neutral-900 tabular-nums">{offers.length}</strong>{' '}
-          {t.results}
+          {pluralResults(offers.length)}
           {selected.length > 0 ? (
             <>
               {' · '}
@@ -70,8 +72,21 @@ export default async function Results({
           selected={selected}
           showKids={showKids}
           kidsHref={buildHref({ sizes: selected, brand, query, kids: !showKids })}
+          query={query}
         />
       </section>
+
+      {query ? (
+        <p className="mb-4 text-sm text-neutral-600">
+          {t.resultsFor} <strong className="text-neutral-900">“{query}”</strong>{' '}
+          <Link
+            href={buildHref({ sizes: selected, brand, kids: showKids })}
+            className="ml-1 underline underline-offset-4 hover:text-neutral-900"
+          >
+            {t.clearSearch}
+          </Link>
+        </p>
+      ) : null}
 
       <nav aria-label={t.brand} className="mb-8 flex flex-wrap gap-2 text-sm">
         <FilterChip
