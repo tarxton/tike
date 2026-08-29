@@ -18,6 +18,12 @@
     "typecheck": {
       "dependsOn": ["^build"]
     },
+    "@tike/web#typecheck": {
+      // `next typegen` and `next build` both write .next/types. Run in parallel they
+      // race, and typecheck intermittently fails with "Cannot find module './routes.js'".
+      // Ordering typecheck after the build makes it deterministic.
+      "dependsOn": ["@tike/web#build"]
+    },
     "test": {
       "dependsOn": ["^build"]
     },
