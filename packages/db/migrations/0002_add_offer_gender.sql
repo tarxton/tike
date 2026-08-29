@@ -1,0 +1,1 @@
+ALTER TABLE "offer" ADD COLUMN "gender" "gender";

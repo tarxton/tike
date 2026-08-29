@@ -6,7 +6,8 @@
   "scripts": {
     "crawl": "tsx --env-file=../../.env.local src/crawl.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "match": "tsx --env-file=../../.env.local src/match.ts"
   },
   "dependencies": {
     "@tike/contracts": "workspace:*",

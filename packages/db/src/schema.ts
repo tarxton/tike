@@ -170,6 +170,8 @@ export const offer = pgTable(
     rawBrand: text('raw_brand'),
     sku: text('sku'),
     imageUrl: text('image_url'),
+    /** Guards matching: a kids shoe must never merge into its adult namesake. */
+    gender: genderEnum('gender'),
     priceMinor: integer('price_minor').notNull(),
     originalPriceMinor: integer('original_price_minor'),
     currency: currencyEnum('currency').notNull().default('BAM'),

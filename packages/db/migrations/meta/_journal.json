@@ -15,6 +15,13 @@
       "when": 1787953657014,
       "tag": "0001_enable_extensions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788019517156,
+      "tag": "0002_add_offer_gender",
+      "breakpoints": true
     }
   ]
 }
