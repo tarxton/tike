@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { availableSizes } from '@tike/db';
-import { SearchBar } from '@/components/search-bar';
-import { SizeGrid } from '@/components/size-grid';
+import { Filters } from '@/components/filters';
 import { t } from '@/lib/messages';
 import { getSizes } from '@/lib/size';
 
@@ -24,16 +23,8 @@ export default async function Home({
       </h1>
       <p className="mt-3 text-lg text-neutral-600">{t.intro}</p>
 
-      <section className="mt-8" aria-label={t.search}>
-        <SearchBar sizes={selected} showKids={showKids} />
-        <p className="mt-2 text-sm text-neutral-500">{t.orBrowseBySize}</p>
-      </section>
-
-      <section className="mt-8" aria-labelledby="size-heading">
-        <h2 id="size-heading" className="mb-3 text-sm font-medium text-neutral-700">
-          {t.chooseSize}
-        </h2>
-        <SizeGrid
+      <section className="mt-10">
+        <Filters
           sizes={sizes}
           selected={selected}
           showKids={showKids}

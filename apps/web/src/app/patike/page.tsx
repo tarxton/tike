@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { availableBrands, availableSizes, searchOffers } from '@tike/db';
+import { Filters } from '@/components/filters';
 import { OfferCard } from '@/components/offer-card';
-import { SearchBar } from '@/components/search-bar';
-import { SizeGrid } from '@/components/size-grid';
 import { formatSize, pluralResults, t } from '@/lib/messages';
 import { getSizes } from '@/lib/size';
 import { parseSizes } from '@/lib/sizes';
@@ -52,7 +51,6 @@ export default async function Results({
         <Link href="/" className="text-xl font-semibold tracking-tight text-neutral-900">
           {t.siteName}
         </Link>
-        <SearchBar defaultValue={query} sizes={selected} showKids={showKids} />
         <p className="text-sm text-neutral-600">
           <strong className="font-semibold text-neutral-900 tabular-nums">{offers.length}</strong>{' '}
           {pluralResults(offers.length)}
@@ -67,12 +65,14 @@ export default async function Results({
       </header>
 
       <section aria-label={t.chooseSize} className="mb-6">
-        <SizeGrid
+        <Filters
           sizes={sizes}
           selected={selected}
           showKids={showKids}
           kidsHref={buildHref({ sizes: selected, brand, query, kids: !showKids })}
           query={query}
+          brand={brand}
+          compact
         />
       </section>
 
