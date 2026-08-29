@@ -15,6 +15,8 @@ const shops = [
     baseUrl: 'https://www.buzzsneakers.ba',
     platform: 'nbshop' as const,
     sitemapUrl: 'https://www.buzzsneakers.ba/files/sitemap/BIH_ba/sitemap.xml',
+    // Their sitemap lists the whole catalogue; only /patike/ is in scope.
+    crawlConfig: { pathAllow: ['patike'] },
   },
   {
     slug: 'sportvision',
@@ -22,6 +24,7 @@ const shops = [
     baseUrl: 'https://www.sportvision.ba',
     platform: 'nbshop' as const,
     sitemapUrl: 'https://www.sportvision.ba/files/sitemap/BIH_ba/sitemap.xml',
+    crawlConfig: { pathAllow: ['patike'] },
   },
 ];
 
@@ -45,6 +48,7 @@ await withDb(async (db) => {
           baseUrl: s.baseUrl,
           platform: s.platform,
           sitemapUrl: s.sitemapUrl,
+          crawlConfig: s.crawlConfig,
         },
       })
       .returning({ id: shop.id, slug: shop.slug });

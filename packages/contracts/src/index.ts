@@ -12,6 +12,19 @@ export const platformSchema = z.enum(['nbshop', 'magento2', 'woo', 'shopify', 'f
 export type Platform = z.infer<typeof platformSchema>;
 
 /**
+ * Per-shop crawl settings, stored in `shop.crawl_config`.
+ *
+ * Shops publish their entire catalogue in one sitemap — Buzz lists 4,397 URLs of which
+ * only 1,618 are footwear. Filtering by URL path before fetching keeps the crawl inside
+ * the catalogue tike covers, and avoids requesting thousands of pages we would discard.
+ */
+export const crawlConfigSchema = z.object({
+  /** First path segment must be one of these, e.g. ["patike"]. Empty means no filter. */
+  pathAllow: z.array(z.string().min(1)).default([]),
+});
+export type CrawlConfig = z.infer<typeof crawlConfigSchema>;
+
+/**
  * One size row as scraped from a product page, before normalization.
  *
  * `euRaw` is the shop's own EU label ("41", "40 2/3"); normalization to a canonical

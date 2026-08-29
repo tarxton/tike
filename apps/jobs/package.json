@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "crawl": "tsx src/crawl.ts",
+    "crawl": "tsx --env-file=../../.env.local src/crawl.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },
@@ -12,7 +12,8 @@
     "@tike/contracts": "workspace:*",
     "@tike/core": "workspace:*",
     "@tike/crawler": "workspace:*",
-    "@tike/db": "workspace:*"
+    "@tike/db": "workspace:*",
+    "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
