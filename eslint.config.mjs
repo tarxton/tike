@@ -35,7 +35,12 @@ export default tseslint.config(
   {
     // Jobs and maintenance scripts are CLI processes running on Node: console output
     // is their interface, and they use Node/web globals directly.
-    files: ['apps/jobs/**/*.ts', '**/scripts/**/*.{ts,mjs,js}', '*.config.{ts,mjs,js}'],
+    files: [
+      'apps/jobs/**/*.ts',
+      '**/scripts/**/*.{ts,mjs,js}',
+      '**/src/seed.ts',
+      '*.config.{ts,mjs,js}',
+    ],
     languageOptions: { globals: { ...globals.node } },
     rules: { 'no-console': 'off' },
   },
