@@ -42,8 +42,28 @@ export interface SearchParams {
   sizesEu?: number[];
   brand?: string;
   query?: string;
+  /**
+   * Include listings that only come in children's sizes.
+   *
+   * Off by default. Results are ordered by price, and children's shoes are structurally
+   * cheaper, so including them turns an unfiltered search into a wall of kids' shoes
+   * before an adult sees a single relevant result.
+   */
+  includeKids?: boolean;
   limit?: number;
   offset?: number;
+}
+
+/** Sizes below this are children's; mirrors ADULT_MIN_SIZE in the web app. */
+const ADULT_MIN_SIZE = 36;
+
+/** Excludes listings whose entire in-stock range is children's sizes. */
+function kidsFilter(includeKids: boolean | undefined) {
+  if (includeKids) return sql``;
+  return sql`and exists (
+    select 1 from offer_size k
+    where k.offer_id = o.id and k.in_stock and k.size_eu >= ${ADULT_MIN_SIZE}
+  )`;
 }
 
 /** `size_eu in (45, 46)`, or nothing when no sizes are selected. */
@@ -67,7 +87,9 @@ function sizeFilter(sizesEu: number[] | undefined) {
  * normalized column with the trigram index that migration 0001 already prepares.
  */
 export async function searchOffers(params: SearchParams = {}): Promise<SearchResult[]> {
-  const { sizesEu, brand, query, limit = 48, offset = 0 } = params;
+  const { sizesEu, brand, query, includeKids, limit = 48, offset = 0 } = params;
+  // An explicitly chosen children's size is a deliberate request for them.
+  const wantsKids = includeKids || (sizesEu ?? []).some((s) => s < ADULT_MIN_SIZE);
 
   const rows = await db().execute(sql`
     select
@@ -96,6 +118,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchRes
     where s.active
       and o.in_stock
       ${sizeFilter(sizesEu)}
+      ${kidsFilter(wantsKids)}
       ${brand === undefined ? sql`` : sql`and unaccent(lower(o.raw_brand)) = unaccent(lower(${brand}))`}
       ${
         query === undefined || query.trim() === ''
@@ -156,15 +179,17 @@ export async function availableSizes(): Promise<number[]> {
  * that ignores the current filter promises results the click cannot deliver.
  */
 export async function availableBrands(
-  params: { sizesEu?: number[]; query?: string } = {},
+  params: { sizesEu?: number[]; query?: string; includeKids?: boolean } = {},
 ): Promise<{ brand: string; count: number }[]> {
-  const { sizesEu, query } = params;
+  const { sizesEu, query, includeKids } = params;
+  const wantsKids = includeKids || (sizesEu ?? []).some((s) => s < ADULT_MIN_SIZE);
   const rows = await db().execute(sql`
     select o.raw_brand as "brand", count(*)::int as "count"
     from offer o
     join shop s on s.id = o.shop_id
     where o.in_stock and s.active and o.raw_brand is not null
       ${sizeFilter(sizesEu)}
+      ${kidsFilter(wantsKids)}
       ${
         query === undefined || query.trim() === ''
           ? sql``

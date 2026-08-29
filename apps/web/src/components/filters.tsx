@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { formatSize, t } from '@/lib/messages';
-import { applyFilters } from '@/lib/size';
+import { applyFilters, clearFilters } from '@/lib/size';
 import { ADULT_MIN_SIZE } from '@/lib/sizes';
 
 /**
@@ -21,6 +21,7 @@ export function Filters({
   query,
   brand,
   compact = false,
+  returnTo = '/patike',
 }: {
   sizes: number[];
   selected: number[];
@@ -30,6 +31,8 @@ export function Filters({
   brand?: string;
   /** Results page: tighter spacing, since the grid is above the fold. */
   compact?: boolean;
+  /** Where "clear" returns to. On the home page, clearing must not run a search. */
+  returnTo?: string;
 }) {
   const visible = showKids ? sizes : sizes.filter((s) => s >= ADULT_MIN_SIZE);
   const kidsCount = sizes.filter((s) => s < ADULT_MIN_SIZE).length;
@@ -38,6 +41,7 @@ export function Filters({
     <form action={applyFilters} className={compact ? 'space-y-3' : 'space-y-5'}>
       {showKids ? <input type="hidden" name="djecije" value="1" /> : null}
       {brand ? <input type="hidden" name="brend" value={brand} /> : null}
+      <input type="hidden" name="returnTo" value={returnTo} />
 
       <div className="flex w-full max-w-xl gap-2">
         <input
@@ -60,30 +64,21 @@ export function Filters({
         <legend className="mb-2 text-sm font-medium text-neutral-700">{t.chooseSize}</legend>
 
         <div className="flex flex-wrap gap-2">
-          {visible.map((size) => {
-            const isSelected = selected.includes(size);
-            return (
-              <label
-                key={size}
-                className={[
-                  'cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition select-none',
-                  'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-offset-2',
-                  isSelected
-                    ? 'border-neutral-900 bg-neutral-900 text-white'
-                    : 'border-neutral-300 bg-white text-neutral-900 hover:border-neutral-900',
-                ].join(' ')}
-              >
-                <input
-                  type="checkbox"
-                  name="velicina"
-                  value={size}
-                  defaultChecked={isSelected}
-                  className="sr-only"
-                />
-                {formatSize(size)}
-              </label>
-            );
-          })}
+          {visible.map((size) => (
+            // The checked styling must come from CSS, not from the server-rendered
+            // `selected` list: the input is visually hidden, so a server-computed class
+            // never changes on click and the button looks dead until the page reloads.
+            <label key={size} className="cursor-pointer select-none">
+              <input
+                type="checkbox"
+                name="velicina"
+                value={size}
+                defaultChecked={selected.includes(size)}
+                className="peer sr-only"
+              />
+              <span className="size-chip">{formatSize(size)}</span>
+            </label>
+          ))}
         </div>
 
         <p className="mt-2 text-xs text-neutral-500">{t.multiSizeHint}</p>
@@ -98,12 +93,15 @@ export function Filters({
         </button>
 
         {selected.length > 0 || query ? (
-          <Link
-            href="/patike"
-            className="text-sm text-neutral-600 underline underline-offset-4 hover:text-neutral-900"
+          // formAction, so this submits the same form to a different action and can
+          // clear the stored sizes as well as the URL.
+          <button
+            type="submit"
+            formAction={clearFilters}
+            className="text-sm text-neutral-600 underline underline-offset-4 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             {t.clearFilters}
-          </Link>
+          </button>
         ) : null}
 
         {kidsCount > 0 ? (

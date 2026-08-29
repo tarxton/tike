@@ -48,3 +48,18 @@ export async function applyFilters(formData: FormData): Promise<void> {
   const qs = params.toString();
   redirect(qs ? `/patike?${qs}` : '/patike');
 }
+
+/**
+ * Clear every filter, including the stored sizes.
+ *
+ * Must be an action, not a link: a link only clears the URL, and the page falls back to
+ * the cookie, so the filters reappear and the button looks broken.
+ *
+ * Returns to the page it was pressed on rather than jumping to results — on the home
+ * page, clearing a selection should not run a search.
+ */
+export async function clearFilters(formData: FormData): Promise<void> {
+  (await cookies()).delete(COOKIE);
+  const returnTo = String(formData.get('returnTo') ?? '/patike');
+  redirect(returnTo === '/' ? '/' : '/patike');
+}

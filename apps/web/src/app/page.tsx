@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { availableSizes } from '@tike/db';
 import { Filters } from '@/components/filters';
 import { t } from '@/lib/messages';
@@ -29,14 +28,9 @@ export default async function Home({
           selected={selected}
           showKids={showKids}
           kidsHref={showKids ? '/' : '/?djecije=1'}
+          returnTo="/"
         />
       </section>
-
-      <p className="mt-10 text-sm text-neutral-500">
-        <Link href="/patike" className="underline underline-offset-4 hover:text-neutral-900">
-          {t.allSizes} →
-        </Link>
-      </p>
     </main>
   );
 }

@@ -38,9 +38,9 @@ export default async function Results({
   const showKids = first('djecije') === '1';
 
   const [offers, sizes, brands] = await Promise.all([
-    searchOffers({ sizesEu: selected, brand, query }),
+    searchOffers({ sizesEu: selected, brand, query, includeKids: showKids }),
     availableSizes(),
-    availableBrands({ sizesEu: selected, query }),
+    availableBrands({ sizesEu: selected, query, includeKids: showKids }),
   ]);
 
   const hasFilters = selected.length > 0 || Boolean(brand) || Boolean(query);

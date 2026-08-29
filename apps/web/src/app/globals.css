@@ -22,6 +22,45 @@
   --color-foreground: var(--foreground);
 }
 
+/*
+ * Size chip.
+ *
+ * Written by hand rather than with `peer-checked:` utilities: the checked and base
+ * utilities have equal specificity, so which one wins depends on Tailwind's emission
+ * order — and `bg-white` was winning, leaving the button visually dead on click.
+ * An explicit sibling rule removes the ambiguity.
+ */
+.size-chip {
+  display: block;
+  border: 1px solid #d4d4d4;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  color: #171717;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.size-chip:hover {
+  border-color: #171717;
+}
+
+.peer:checked ~ .size-chip {
+  background: #171717;
+  border-color: #171717;
+  color: #ffffff;
+}
+
+.peer:focus-visible ~ .size-chip {
+  outline: 2px solid #171717;
+  outline-offset: 2px;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
