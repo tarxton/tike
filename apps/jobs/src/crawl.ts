@@ -117,6 +117,7 @@ await withDb(async (db) => {
             sku: normalized.sku,
             imageUrl: normalized.imageUrl,
             priceMinor: normalized.price.amountMinor,
+            originalPriceMinor: normalized.originalPrice?.amountMinor ?? null,
             currency: normalized.price.currency,
             inStock: normalized.inStock,
           })
@@ -129,6 +130,7 @@ await withDb(async (db) => {
               sku: normalized.sku,
               imageUrl: normalized.imageUrl,
               priceMinor: normalized.price.amountMinor,
+              originalPriceMinor: normalized.originalPrice?.amountMinor ?? null,
               inStock: normalized.inStock,
               lastSeenAt: sql`now()`,
             },

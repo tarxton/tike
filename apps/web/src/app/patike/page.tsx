@@ -4,7 +4,8 @@ import { availableBrands, availableSizes, searchOffers } from '@tike/db';
 import { OfferCard } from '@/components/offer-card';
 import { SizeGrid } from '@/components/size-grid';
 import { formatSize, t } from '@/lib/messages';
-import { getSize } from '@/lib/size';
+import { getSizes } from '@/lib/size';
+import { parseSizes } from '@/lib/sizes';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,19 +31,19 @@ export default async function Results({
   };
 
   // The URL wins over the cookie, so a shared link shows what the sender saw.
-  const sizeParam = Number(first('velicina'));
-  const cookieSize = await getSize();
-  const size = Number.isFinite(sizeParam) && sizeParam > 0 ? sizeParam : cookieSize;
+  const urlSizes = parseSizes(first('velicina'));
+  const selected = urlSizes.length > 0 ? urlSizes : await getSizes();
   const brand = first('brend');
   const query = first('q');
+  const showKids = first('djecije') === '1';
 
   const [offers, sizes, brands] = await Promise.all([
-    searchOffers({ sizeEu: size ?? undefined, brand, query }),
+    searchOffers({ sizesEu: selected, brand, query }),
     availableSizes(),
-    availableBrands({ sizeEu: size ?? undefined, query }),
+    availableBrands({ sizesEu: selected, query }),
   ]);
 
-  const hasFilters = Boolean(size || brand || query);
+  const hasFilters = selected.length > 0 || Boolean(brand) || Boolean(query);
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
@@ -53,27 +54,36 @@ export default async function Results({
         <p className="text-sm text-neutral-600">
           <strong className="font-semibold text-neutral-900 tabular-nums">{offers.length}</strong>{' '}
           {t.results}
-          {size ? (
+          {selected.length > 0 ? (
             <>
               {' · '}
-              {t.chooseSizeShort} <strong className="text-neutral-900">{formatSize(size)}</strong>
+              {t.chooseSizeShort}{' '}
+              <strong className="text-neutral-900">{selected.map(formatSize).join(', ')}</strong>
             </>
           ) : null}
         </p>
       </header>
 
       <section aria-label={t.chooseSize} className="mb-6">
-        <SizeGrid sizes={sizes} selected={size} />
+        <SizeGrid
+          sizes={sizes}
+          selected={selected}
+          showKids={showKids}
+          kidsHref={buildHref({ sizes: selected, brand, query, kids: !showKids })}
+        />
       </section>
 
       <nav aria-label={t.brand} className="mb-8 flex flex-wrap gap-2 text-sm">
-        <FilterChip href={buildHref({ size, brand: undefined, query })} active={!brand}>
+        <FilterChip
+          href={buildHref({ sizes: selected, brand: undefined, query, kids: showKids })}
+          active={!brand}
+        >
           {t.allBrands}
         </FilterChip>
         {brands.slice(0, 12).map((b) => (
           <FilterChip
             key={b.brand}
-            href={buildHref({ size, brand: b.brand, query })}
+            href={buildHref({ sizes: selected, brand: b.brand, query, kids: showKids })}
             active={brand?.toLowerCase() === b.brand.toLowerCase()}
           >
             {b.brand} <span className="text-neutral-400 tabular-nums">{b.count}</span>
@@ -98,7 +108,7 @@ export default async function Results({
         <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {offers.map((offer) => (
             <li key={offer.offerId}>
-              <OfferCard offer={offer} size={size} />
+              <OfferCard offer={offer} sizes={selected} />
             </li>
           ))}
         </ul>
@@ -113,18 +123,21 @@ export default async function Results({
 }
 
 function buildHref({
-  size,
+  sizes,
   brand,
   query,
+  kids,
 }: {
-  size?: number | null;
+  sizes: number[];
   brand?: string;
   query?: string;
+  kids?: boolean;
 }): string {
   const sp = new URLSearchParams();
-  if (size) sp.set('velicina', String(size));
+  if (sizes.length > 0) sp.set('velicina', sizes.join(','));
   if (brand) sp.set('brend', brand);
   if (query) sp.set('q', query);
+  if (kids) sp.set('djecije', '1');
   const qs = sp.toString();
   return qs ? `/patike?${qs}` : '/patike';
 }

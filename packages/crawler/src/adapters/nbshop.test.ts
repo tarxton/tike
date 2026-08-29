@@ -120,6 +120,21 @@ describe('parseNbshop', () => {
     }
   });
 
+  it('reports no original price when the shop is not discounting', () => {
+    // NBSHOP repeats the current price in the old-price field at full price. Treating
+    // that as a sale would render every listing as "-0%".
+    expect(parseFixture(2).originalPriceRaw).toBeNull();
+  });
+
+  it('extracts the pre-sale price when there is a real discount', () => {
+    // Synthetic fixture: the live catalogue had no active sneaker discounts to capture.
+    const dir = join(import.meta.dirname, '../../fixtures/buzz-sale');
+    const entry = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'))[0];
+    const offer = parseNbshop(readFileSync(join(dir, entry.file), 'utf8'), entry.url);
+    expect(offer.priceRaw).toBe('259.00');
+    expect(offer.originalPriceRaw).toBe('370.00');
+  });
+
   it('throws ParseError on a page with no product markup', () => {
     expect(() =>
       parseNbshop('<html><body>not a product</body></html>', 'https://x.test/p'),

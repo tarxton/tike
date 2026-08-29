@@ -21,6 +21,10 @@ export interface SearchResult {
   url: string;
   imageUrl: string | null;
   priceMinor: number;
+  /** The pre-sale price when the shop is discounting, otherwise null. */
+  originalPriceMinor: number | null;
+  /** Whole-percent saving, e.g. 30 for -30%. Null when not on sale. */
+  discountPercent: number | null;
   currency: string;
   /** In-stock EU sizes for this listing, ascending. */
   sizesEu: number[];
@@ -29,12 +33,30 @@ export interface SearchResult {
 }
 
 export interface SearchParams {
-  /** Hard filter: only listings a shop can sell in this EU size today. */
-  sizeEu?: number;
+  /**
+   * Hard filter: only listings a shop can sell today in at least one of these EU sizes.
+   *
+   * Multiple sizes are the common case, not an edge case — plenty of people fit both
+   * 45 and 46 and want to see either.
+   */
+  sizesEu?: number[];
   brand?: string;
   query?: string;
   limit?: number;
   offset?: number;
+}
+
+/** `size_eu in (45, 46)`, or nothing when no sizes are selected. */
+function sizeFilter(sizesEu: number[] | undefined) {
+  if (!sizesEu || sizesEu.length === 0) return sql``;
+  const list = sql.join(
+    sizesEu.map((s) => sql`${s}`),
+    sql`, `,
+  );
+  return sql`and exists (
+    select 1 from offer_size f
+    where f.offer_id = o.id and f.in_stock and f.size_eu in (${list})
+  )`;
 }
 
 /**
@@ -45,7 +67,7 @@ export interface SearchParams {
  * normalized column with the trigram index that migration 0001 already prepares.
  */
 export async function searchOffers(params: SearchParams = {}): Promise<SearchResult[]> {
-  const { sizeEu, brand, query, limit = 48, offset = 0 } = params;
+  const { sizesEu, brand, query, limit = 48, offset = 0 } = params;
 
   const rows = await db().execute(sql`
     select
@@ -56,7 +78,8 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchRes
       o.raw_brand     as "brand",
       o.url           as "url",
       o.image_url     as "imageUrl",
-      o.price_minor   as "priceMinor",
+      o.price_minor          as "priceMinor",
+      o.original_price_minor as "originalPriceMinor",
       o.currency::text as "currency",
       -- json_agg, not array_agg: the HTTP driver hands back Postgres arrays as the
       -- raw string "{40.00,41.00}", whereas JSON arrives as a real array.
@@ -72,14 +95,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchRes
     join shop s on s.id = o.shop_id
     where s.active
       and o.in_stock
-      ${
-        sizeEu === undefined
-          ? sql``
-          : sql`and exists (
-        select 1 from offer_size f
-        where f.offer_id = o.id and f.in_stock and f.size_eu = ${sizeEu}
-      )`
-      }
+      ${sizeFilter(sizesEu)}
       ${brand === undefined ? sql`` : sql`and unaccent(lower(o.raw_brand)) = unaccent(lower(${brand}))`}
       ${
         query === undefined || query.trim() === ''
@@ -90,22 +106,36 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchRes
     limit ${limit} offset ${offset}
   `);
 
-  return (rows.rows as Record<string, unknown>[]).map((r) => ({
-    offerId: Number(r.offerId),
-    shopSlug: String(r.shopSlug),
-    shopName: String(r.shopName),
-    title: String(r.title),
-    brand: r.brand === null ? null : String(r.brand),
-    url: String(r.url),
-    imageUrl: r.imageUrl === null ? null : String(r.imageUrl),
-    priceMinor: Number(r.priceMinor),
-    currency: String(r.currency),
-    sizesEu: Array.isArray(r.sizesEu) ? r.sizesEu.map(Number) : [],
-    shopCount: 1,
-  }));
+  return (rows.rows as Record<string, unknown>[]).map((r) => {
+    const priceMinor = Number(r.priceMinor);
+    const originalPriceMinor = r.originalPriceMinor === null ? null : Number(r.originalPriceMinor);
+    // Only treat it as a sale when the old price is genuinely higher; shops sometimes
+    // repeat the current price in the "old price" field.
+    const onSale = originalPriceMinor !== null && originalPriceMinor > priceMinor;
+    return {
+      offerId: Number(r.offerId),
+      shopSlug: String(r.shopSlug),
+      shopName: String(r.shopName),
+      title: String(r.title),
+      brand: r.brand === null ? null : String(r.brand),
+      url: String(r.url),
+      imageUrl: r.imageUrl === null ? null : String(r.imageUrl),
+      priceMinor,
+      originalPriceMinor: onSale ? originalPriceMinor : null,
+      discountPercent: onSale
+        ? Math.round(((originalPriceMinor - priceMinor) / originalPriceMinor) * 100)
+        : null,
+      currency: String(r.currency),
+      sizesEu: Array.isArray(r.sizesEu) ? r.sizesEu.map(Number) : [],
+      shopCount: 1,
+    };
+  });
 }
 
-/** EU sizes that some shop currently has in stock — used to build the size picker. */
+/**
+ * EU sizes that some shop currently has in stock — used to build the size picker,
+ * so a user is never offered a number that returns nothing.
+ */
 export async function availableSizes(): Promise<number[]> {
   const rows = await db().execute(sql`
     select distinct sz.size_eu as "sizeEu"
@@ -126,22 +156,15 @@ export async function availableSizes(): Promise<number[]> {
  * that ignores the current filter promises results the click cannot deliver.
  */
 export async function availableBrands(
-  params: { sizeEu?: number; query?: string } = {},
+  params: { sizesEu?: number[]; query?: string } = {},
 ): Promise<{ brand: string; count: number }[]> {
-  const { sizeEu, query } = params;
+  const { sizesEu, query } = params;
   const rows = await db().execute(sql`
     select o.raw_brand as "brand", count(*)::int as "count"
     from offer o
     join shop s on s.id = o.shop_id
     where o.in_stock and s.active and o.raw_brand is not null
-      ${
-        sizeEu === undefined
-          ? sql``
-          : sql`and exists (
-              select 1 from offer_size f
-              where f.offer_id = o.id and f.in_stock and f.size_eu = ${sizeEu}
-            )`
-      }
+      ${sizeFilter(sizesEu)}
       ${
         query === undefined || query.trim() === ''
           ? sql``

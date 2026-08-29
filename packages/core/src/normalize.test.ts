@@ -102,6 +102,17 @@ describe('normalizeOffer', () => {
     expect(() => normalizeOffer(offer({ priceRaw: 'n/a' }))).toThrow(NormalizationError);
   });
 
+  it('records a genuine discount', () => {
+    const result = normalizeOffer(offer({ priceRaw: '259.00', originalPriceRaw: '370.00' }));
+    expect(result.originalPrice).toEqual({ amountMinor: 37000, currency: 'BAM' });
+  });
+
+  it('ignores an old price that is not actually higher', () => {
+    // Shops repeat the current price in the old-price field on full-price products.
+    expect(normalizeOffer(offer({ originalPriceRaw: '259.00' })).originalPrice).toBeNull();
+    expect(normalizeOffer(offer({ originalPriceRaw: '100.00' })).originalPrice).toBeNull();
+  });
+
   it('builds a diacritic-folded search document', () => {
     const result = normalizeOffer(offer({ title: 'Nike Patike MUŠKE ZOOM', brand: 'Nike' }));
     expect(result.searchDoc).toContain('muske zoom');

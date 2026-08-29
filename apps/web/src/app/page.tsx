@@ -2,13 +2,19 @@ import Link from 'next/link';
 import { availableSizes } from '@tike/db';
 import { SizeGrid } from '@/components/size-grid';
 import { t } from '@/lib/messages';
-import { getSize } from '@/lib/size';
+import { getSizes } from '@/lib/size';
 
 // Results depend on live stock, so nothing here is prerendered at build time.
 export const dynamic = 'force-dynamic';
 
-export default async function Home() {
-  const [sizes, selected] = await Promise.all([availableSizes(), getSize()]);
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const showKids = params.djecije === '1';
+  const [sizes, selected] = await Promise.all([availableSizes(), getSizes()]);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-5 py-16">
@@ -21,7 +27,12 @@ export default async function Home() {
         <h2 id="size-heading" className="mb-3 text-sm font-medium text-neutral-700">
           {t.chooseSize}
         </h2>
-        <SizeGrid sizes={sizes} selected={selected} />
+        <SizeGrid
+          sizes={sizes}
+          selected={selected}
+          showKids={showKids}
+          kidsHref={showKids ? '/' : '/?djecije=1'}
+        />
       </section>
 
       <p className="mt-10 text-sm text-neutral-500">

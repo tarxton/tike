@@ -113,6 +113,39 @@ function extractSizes($: CheerioAPI): RawSize[] {
     .filter((s) => s.raw !== '');
 }
 
+/**
+ * The pre-sale price, when the shop is running one.
+ *
+ * NBSHOP carries `data-productsize-oldprice` on each size row alongside
+ * `data-productsize-price`. On a full-price product the two are equal, so the old
+ * price is only reported when it is genuinely higher — otherwise every listing would
+ * render as "on sale, 0% off".
+ */
+function extractOriginalPrice($: CheerioAPI, priceRaw: string): string | null {
+  const current = toNumber(priceRaw);
+  let best: number | null = null;
+
+  for (const li of $('ul.product-attributes li').toArray()) {
+    const old = toNumber($(li).attr('data-productsize-oldprice') ?? '');
+    if (old === null) continue;
+    if (current !== null && old <= current) continue;
+    best = best === null ? old : Math.max(best, old);
+  }
+
+  return best === null ? null : best.toFixed(2);
+}
+
+/** "259,00" and "259.00" both mean 259. */
+function toNumber(raw: string): number | null {
+  const cleaned = raw.trim().replace(/\s/g, '');
+  if (!cleaned) return null;
+  const normalized = /,\d{2}$/.test(cleaned)
+    ? cleaned.replace(/\./g, '').replace(',', '.')
+    : cleaned.replace(/,/g, '');
+  const value = Number(normalized);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 /** Reads "Veličina EU: 41<br />Veličina UK: 7<br />" style tooltips. */
 function tooltipValue(tooltip: string, system: 'EU' | 'UK' | 'US'): string {
   const match = tooltip.match(new RegExp(`Veli[čc]ina ${system}:\\s*([^<]+)`, 'i'));
@@ -158,7 +191,7 @@ export function parseNbshop(html: string, url: string): ParsedOffer {
     sku: ld.sku?.trim() || null,
     imageUrl: firstImage(ld.image),
     priceRaw,
-    originalPriceRaw: null,
+    originalPriceRaw: extractOriginalPrice($, priceRaw),
     currency: currency === 'EUR' ? ('EUR' as const) : ('BAM' as const),
     gender: extractGender($, title),
     sizes,

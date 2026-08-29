@@ -7,7 +7,7 @@ import { formatPrice, formatSize, t } from '@/lib/messages';
  * Images are hotlinked from the shop for now; the Phase 2 image pipeline stores
  * resized copies in R2 and serves them from our own CDN.
  */
-export function OfferCard({ offer, size }: { offer: SearchResult; size?: number | null }) {
+export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: number[] }) {
   const shownSizes = offer.sizesEu.slice(0, 10);
   const extra = offer.sizesEu.length - shownSizes.length;
 
@@ -45,10 +45,28 @@ export function OfferCard({ offer, size }: { offer: SearchResult; size?: number 
             {offer.title}
           </h3>
 
-          <div className="mt-auto flex items-baseline justify-between gap-2 pt-1">
-            <span className="text-base font-semibold text-neutral-900">
-              {formatPrice(offer.priceMinor, offer.currency)}
-            </span>
+          <div className="mt-auto flex flex-col gap-1 pt-1">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span
+                className={[
+                  'text-base font-semibold',
+                  offer.discountPercent === null ? 'text-neutral-900' : 'text-red-600',
+                ].join(' ')}
+              >
+                {formatPrice(offer.priceMinor, offer.currency)}
+              </span>
+
+              {offer.originalPriceMinor !== null ? (
+                <>
+                  <span className="text-sm text-neutral-500 line-through">
+                    {formatPrice(offer.originalPriceMinor, offer.currency)}
+                  </span>
+                  <span className="rounded bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-700 tabular-nums">
+                    −{offer.discountPercent}%
+                  </span>
+                </>
+              ) : null}
+            </div>
             <span className="text-xs text-neutral-500">{offer.shopName}</span>
           </div>
         </div>
@@ -62,7 +80,7 @@ export function OfferCard({ offer, size }: { offer: SearchResult; size?: number 
               key={s}
               className={[
                 'rounded px-1.5 py-0.5 text-[11px] tabular-nums',
-                s === size ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-700',
+                sizes.includes(s) ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-700',
               ].join(' ')}
             >
               {formatSize(s)}

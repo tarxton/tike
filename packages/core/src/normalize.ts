@@ -31,6 +31,8 @@ export interface NormalizedOffer {
   sku: string | null;
   imageUrl: string | null;
   price: Money;
+  /** Pre-sale price, only set when the shop is genuinely discounting. */
+  originalPrice: Money | null;
   gender: Gender | null;
   inStock: boolean;
   searchDoc: string;
@@ -82,6 +84,14 @@ export function normalizeOffer(parsed: ParsedOffer): NormalizedOffer {
   const price = parsePrice(parsed.priceRaw, parsed.currency as Currency);
   if (!price) throw new NormalizationError(`unparseable price "${parsed.priceRaw}"`);
 
+  // A discount is only a discount if the old price is higher. Shops routinely repeat
+  // the current price in the old-price field on full-price products.
+  const originalParsed = parsed.originalPriceRaw
+    ? parsePrice(parsed.originalPriceRaw, parsed.currency as Currency)
+    : null;
+  const originalPrice =
+    originalParsed && originalParsed.amountMinor > price.amountMinor ? originalParsed : null;
+
   const sizes: NormalizedSize[] = [];
   for (const raw of parsed.sizes) {
     const eu = raw.euRaw ? parseEuSize(raw.euRaw) : null;
@@ -120,6 +130,7 @@ export function normalizeOffer(parsed: ParsedOffer): NormalizedOffer {
     sku: parsed.sku,
     imageUrl: parsed.imageUrl,
     price,
+    originalPrice,
     gender: parsed.gender,
     inStock: merged.some((s) => s.inStock),
     searchDoc,

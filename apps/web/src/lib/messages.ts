@@ -14,6 +14,11 @@ export const t = {
   changeSize: 'Promijeni broj',
   allSizes: 'Svi brojevi',
   size: 'Veličina',
+  showKids: 'Prikaži dječije brojeve',
+  hideKids: 'Sakrij dječije brojeve',
+  multiSizeHint: 'Možeš odabrati više brojeva odjednom.',
+  discount: 'Popust',
+  oldPrice: 'Stara cijena',
 
   search: 'Pretraži',
   searchPlaceholder: 'npr. air force, adidas, nike',
