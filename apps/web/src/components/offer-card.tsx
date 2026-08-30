@@ -12,15 +12,31 @@ import { formatPrice, formatSize, pluralShops, t } from '@/lib/messages';
  * Images are hotlinked from the shop for now; the Phase 2 image pipeline stores
  * resized copies in R2 and serves them from our own CDN.
  */
+/**
+ * `/go/123?velicina=44`, so the outclick records what the shopper was filtering for.
+ *
+ * Only a single selected size is passed: the click log answers "who wanted a 44 here",
+ * and a list of sizes would make that question unanswerable.
+ */
+function goHref(offerId: number, sizes: number[]): string {
+  const only = sizes.length === 1 ? sizes[0] : undefined;
+  return only === undefined ? `/go/${offerId}` : `/go/${offerId}?velicina=${only}`;
+}
+
 export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: number[] }) {
   const shownSizes = offer.sizesEu.slice(0, 10);
   const extra = offer.sizesEu.length - shownSizes.length;
   const multiShop = offer.shopCount > 1;
+  // Two shops at the same price is common — Buzz and Sport Vision share a price list —
+  // and printing "86,00 – 86,00 KM" for it would be noise dressed as information.
+  const hasSpread = offer.maxPriceMinor > offer.priceMinor;
 
   return (
     <article className="group flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white transition hover:border-neutral-400">
       <a
-        href={`/go/${offer.offerId}`}
+        // The size travels with the click: the route logs it, and "which sizes did
+        // shoppers want here" is the most useful number tike can hand a retailer.
+        href={goHref(offer.offerId, sizes)}
         rel="nofollow sponsored noopener"
         target="_blank"
         className="flex flex-1 flex-col focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
@@ -52,6 +68,12 @@ export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: 
           </h3>
 
           <div className="mt-auto flex flex-col gap-1 pt-1">
+            {/*
+             * Two numbers on a card need saying which is which. An unlabelled struck-out
+             * price beside "od 86,00 KM" reads just as easily as the other shop's price —
+             * and on the Speedcat it literally was both, 215 being the old price *and*
+             * what Buzz charges. Each number now states what it is.
+             */}
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
               <span
                 className={[
@@ -59,24 +81,34 @@ export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: 
                   offer.discountPercent === null ? 'text-neutral-900' : 'text-red-600',
                 ].join(' ')}
               >
-                {multiShop ? `${t.fromPrice} ` : ''}
                 {formatPrice(offer.priceMinor, offer.currency)}
               </span>
-
-              {offer.originalPriceMinor !== null ? (
-                <>
-                  <span className="text-sm text-neutral-500 line-through">
-                    {formatPrice(offer.originalPriceMinor, offer.currency)}
-                  </span>
-                  <span className="rounded bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-700 tabular-nums">
-                    −{offer.discountPercent}%
-                  </span>
-                </>
+              {offer.discountPercent !== null ? (
+                <span className="rounded bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-700 tabular-nums">
+                  −{offer.discountPercent}%
+                </span>
               ) : null}
             </div>
+
+            {offer.originalPriceMinor !== null ? (
+              <span className="text-xs text-neutral-500">
+                {t.oldPrice}{' '}
+                <span className="line-through">
+                  {formatPrice(offer.originalPriceMinor, offer.currency)}
+                </span>
+              </span>
+            ) : null}
+
             {multiShop ? (
               <span className="text-xs font-medium text-neutral-700">
                 {offer.shopCount} {pluralShops(offer.shopCount)}
+                {hasSpread ? (
+                  <span className="font-normal text-neutral-500">
+                    {' · '}
+                    {formatPrice(offer.priceMinor, offer.currency)} –{' '}
+                    {formatPrice(offer.maxPriceMinor, offer.currency)}
+                  </span>
+                ) : null}
               </span>
             ) : (
               <span className="text-xs text-neutral-500">{offer.shopName}</span>

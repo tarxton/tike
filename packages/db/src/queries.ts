@@ -28,6 +28,8 @@ export interface SearchResult {
   currency: string;
   /** In-stock EU sizes for this listing, ascending. */
   sizesEu: number[];
+  /** The dearest shop's price for the same shoe; equals priceMinor for one listing. */
+  maxPriceMinor: number;
   /** How many shops carry this shoe. 1 for an unmatched listing. */
   shopCount: number;
   /** Null while the listing is unmatched, so the card is really just one shop's offer. */
@@ -168,6 +170,9 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
       select
         group_key,
         min(price_minor) as min_price,
+        -- The other end of the range. A card that says "2 shops" has to be able to say
+        -- what the second one charges, or the number is just decoration.
+        max(price_minor) as max_price,
         count(distinct shop_id)::int as shop_count,
         -- The cheapest offer represents the group: it supplies the image, title and
         -- the link, so "od 215 KM" and the click-out always agree.
@@ -185,6 +190,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
       b.url           as "url",
       b.image_url     as "imageUrl",
       g.min_price     as "priceMinor",
+      g.max_price     as "maxPriceMinor",
       b.original_price_minor as "originalPriceMinor",
       b.currency::text as "currency",
       g.shop_count    as "shopCount",
@@ -228,6 +234,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
       url: String(r.url),
       imageUrl: r.imageUrl === null ? null : String(r.imageUrl),
       priceMinor,
+      maxPriceMinor: Number(r.maxPriceMinor),
       originalPriceMinor: onSale ? originalPriceMinor : null,
       discountPercent: onSale
         ? Math.round(((originalPriceMinor - priceMinor) / originalPriceMinor) * 100)

@@ -36,7 +36,6 @@ export const t = {
   noResultsHint: 'Probaj drugi broj ili model.',
   clearFilters: 'Obriši filtere',
 
-  fromPrice: 'od',
   inShop: 'U prodavnici',
   goToShop: 'Idi u prodavnicu',
   availableSizes: 'Dostupno u brojevima',
