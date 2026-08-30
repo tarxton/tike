@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { availableBrands, availableSizes, searchOffers } from '@tike/db';
 import { Filters } from '@/components/filters';
 import { OfferCard } from '@/components/offer-card';
-import { formatSize, pluralResults, t } from '@/lib/messages';
+import { formatSize, pluralResults, showingSubset, t } from '@/lib/messages';
 import { getSizes } from '@/lib/size';
 import { parseSizes } from '@/lib/sizes';
 
@@ -37,7 +37,7 @@ export default async function Results({
   const query = first('q');
   const showKids = first('djecije') === '1';
 
-  const [offers, sizes, brands] = await Promise.all([
+  const [results, sizes, brands] = await Promise.all([
     searchOffers({ sizesEu: selected, brand, query, includeKids: showKids }),
     availableSizes(),
     availableBrands({ sizesEu: selected, query, includeKids: showKids }),
@@ -52,8 +52,8 @@ export default async function Results({
           {t.siteName}
         </Link>
         <p className="text-sm text-neutral-600">
-          <strong className="font-semibold text-neutral-900 tabular-nums">{offers.length}</strong>{' '}
-          {pluralResults(offers.length)}
+          <strong className="font-semibold text-neutral-900 tabular-nums">{results.total}</strong>{' '}
+          {pluralResults(results.total)}
           {selected.length > 0 ? (
             <>
               {' · '}
@@ -106,7 +106,7 @@ export default async function Results({
         ))}
       </nav>
 
-      {offers.length === 0 ? (
+      {results.items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-neutral-300 px-6 py-16 text-center">
           <p className="font-medium text-neutral-900">{t.noResults}</p>
           <p className="mt-1 text-sm text-neutral-600">{t.noResultsHint}</p>
@@ -121,13 +121,19 @@ export default async function Results({
         </div>
       ) : (
         <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {offers.map((offer) => (
+          {results.items.map((offer) => (
             <li key={offer.offerId}>
               <OfferCard offer={offer} sizes={selected} />
             </li>
           ))}
         </ul>
       )}
+
+      {results.total > results.items.length ? (
+        <p className="mt-6 text-center text-sm text-neutral-600">
+          {showingSubset(results.items.length, results.total)}
+        </p>
+      ) : null}
 
       <footer className="mt-12 border-t border-neutral-200 pt-6 text-xs text-neutral-500">
         <p>{t.priceNote}</p>

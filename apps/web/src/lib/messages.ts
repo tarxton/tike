@@ -54,6 +54,16 @@ export function pluralResults(count: number): string {
   return last === 1 && lastTwo !== 11 ? t.resultOne : t.results;
 }
 
+/**
+ * "Prikazano prvih 48 od 297." — shown when the match set is larger than one page.
+ *
+ * Until pagination exists the rest are unreachable, so say so rather than letting the
+ * grid look like the whole answer.
+ */
+export function showingSubset(shown: number, total: number): string {
+  return `Prikazano prvih ${shown} od ${total}.`;
+}
+
 /** "12990" -> "129,90 KM" */
 export function formatPrice(minor: number, currency: string): string {
   const major = (minor / 100).toFixed(2).replace('.', ',');

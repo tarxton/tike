@@ -32,6 +32,19 @@ export interface SearchResult {
   shopCount: number;
 }
 
+/**
+ * One page of results plus the size of the whole matching set.
+ *
+ * `total` is not `items.length`: the query is limited, so the two differ as soon as
+ * there are more matches than fit on a page. Reporting `items.length` as the result
+ * count told the user "48 rezultata" while the brand facet beside it said "Nike 73".
+ */
+export interface SearchPage {
+  items: SearchResult[];
+  /** Matching offers across every page, ignoring limit/offset. */
+  total: number;
+}
+
 export interface SearchParams {
   /**
    * Hard filter: only listings a shop can sell today in at least one of these EU sizes.
@@ -86,7 +99,7 @@ function sizeFilter(sizesEu: number[] | undefined) {
  * catalogue size (thousands of rows). When it stops being fine, the fix is a stored
  * normalized column with the trigram index that migration 0001 already prepares.
  */
-export async function searchOffers(params: SearchParams = {}): Promise<SearchResult[]> {
+export async function searchOffers(params: SearchParams = {}): Promise<SearchPage> {
   const { sizesEu, brand, query, includeKids, limit = 48, offset = 0 } = params;
   // An explicitly chosen children's size is a deliberate request for them.
   const wantsKids = includeKids || (sizesEu ?? []).some((s) => s < ADULT_MIN_SIZE);
@@ -103,6 +116,9 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchRes
       o.price_minor          as "priceMinor",
       o.original_price_minor as "originalPriceMinor",
       o.currency::text as "currency",
+      -- Total across every page, in the same round trip. A separate count query would
+      -- double the latency and could disagree with the page under concurrent writes.
+      count(*) over() as "totalCount",
       -- json_agg, not array_agg: the HTTP driver hands back Postgres arrays as the
       -- raw string "{40.00,41.00}", whereas JSON arrives as a real array.
       coalesce(
@@ -129,7 +145,8 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchRes
     limit ${limit} offset ${offset}
   `);
 
-  return (rows.rows as Record<string, unknown>[]).map((r) => {
+  const raw = rows.rows as Record<string, unknown>[];
+  const items = raw.map((r) => {
     const priceMinor = Number(r.priceMinor);
     const originalPriceMinor = r.originalPriceMinor === null ? null : Number(r.originalPriceMinor);
     // Only treat it as a sale when the old price is genuinely higher; shops sometimes
@@ -153,6 +170,9 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchRes
       shopCount: 1,
     };
   });
+
+  // No rows means no window to count over, so the total is genuinely zero.
+  return { items, total: raw.length === 0 ? 0 : Number(raw[0].totalCount) };
 }
 
 /**

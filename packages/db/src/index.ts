@@ -6,5 +6,6 @@ export {
   availableSizes,
   availableBrands,
   type SearchResult,
+  type SearchPage,
   type SearchParams,
 } from './queries';
