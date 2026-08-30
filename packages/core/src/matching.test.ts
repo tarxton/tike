@@ -8,6 +8,7 @@ import {
   normalizeStyleCode,
   similarity,
   sizeRangesOverlap,
+  styleCodeBase,
   type MatchCandidate,
 } from './matching';
 
@@ -31,6 +32,28 @@ describe('normalizeStyleCode', () => {
   it('rejects codes too short to be meaningful', () => {
     expect(normalizeStyleCode('AB1')).toBeNull();
     expect(normalizeStyleCode(null)).toBeNull();
+  });
+});
+
+describe('styleCodeBase', () => {
+  it('drops the colourway suffix so one shoe in two colours shares a base', () => {
+    expect(styleCodeBase('IB1857-203')).toBe(styleCodeBase('IB1857-204'));
+    expect(styleCodeBase('1176572-FLCK')).toBe(styleCodeBase('1176572-BYPB'));
+  });
+
+  it('keeps different models apart', () => {
+    expect(styleCodeBase('HV8121-200')).not.toBe(styleCodeBase('IQ3435-045'));
+  });
+
+  it('uses the whole code when the colour is encoded inline', () => {
+    // New Balance and adidas have no separator to cut at.
+    expect(styleCodeBase('U7408XH')).toBe('U7408XH');
+    expect(styleCodeBase('KI9403')).not.toBe(styleCodeBase('JI4462'));
+  });
+
+  it('rejects codes too short to be meaningful', () => {
+    expect(styleCodeBase('AB1')).toBeNull();
+    expect(styleCodeBase(null)).toBeNull();
   });
 });
 
@@ -166,6 +189,28 @@ describe('matchOffers', () => {
   it('still merges same-shop listings when a code proves they are identical', () => {
     const a = candidate({ shopId: 2, sku: 'IM4414-200' });
     const b = candidate({ offerId: 2, shopId: 2, sku: 'IM4414-200' });
+    expect(matchOffers(a, b)?.method).toBe('style_code');
+  });
+});
+
+describe('matchOffers and conflicting style codes', () => {
+  it('refuses a fuzzy merge when the manufacturer codes name different shoes', () => {
+    // Both titles reduce to "Pegasus" and score 1.0, but the codes disagree at the
+    // base — one is a 325 KM shoe and the other a 475 KM one.
+    const a = candidate({ offerId: 1, shopId: 1, model: 'Pegasus', sku: 'HV8121-200' });
+    const b = candidate({ offerId: 2, shopId: 2, model: 'Pegasus', sku: 'IQ3435-045' });
+    expect(matchOffers(a, b)).toBeNull();
+  });
+
+  it('still merges one shoe listed in two colours', () => {
+    const a = candidate({ offerId: 1, shopId: 1, model: 'Cortez', sku: 'IB1857-203' });
+    const b = candidate({ offerId: 2, shopId: 2, model: 'Cortez', sku: 'IB1857-204' });
+    expect(matchOffers(a, b)?.method).toBe('fuzzy');
+  });
+
+  it('leaves the code tiers alone: an identical code still matches outright', () => {
+    const a = candidate({ offerId: 1, shopId: 1, model: 'Cortez', sku: 'IB1857-203' });
+    const b = candidate({ offerId: 2, shopId: 2, model: 'Something Else', sku: 'IB1857-203' });
     expect(matchOffers(a, b)?.method).toBe('style_code');
   });
 });
