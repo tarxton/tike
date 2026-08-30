@@ -30,8 +30,10 @@ export const t = {
 
   results: 'rezultata',
   resultOne: 'rezultat',
-  noResults: 'Nema patika u tom broju.',
-  noResultsHint: 'Probaj drugi broj ili obriši filtere.',
+  // Not "nema patika u tom broju" — the empty state also fires on a model query or a
+  // brand facet, and blaming the size sends the user to fix the wrong filter.
+  noResults: 'Nema rezultata za tu pretragu.',
+  noResultsHint: 'Probaj drugi broj ili model.',
   clearFilters: 'Obriši filtere',
 
   inShop: 'U prodavnici',
