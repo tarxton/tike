@@ -47,24 +47,6 @@ export function normalizeStyleCode(sku: string | null): string | null {
 }
 
 /**
- * The model part of a style code, with the colourway suffix removed.
- *
- * Nike, Hoka, Asics and Skechers all write BASE-COLOUR (`IB1857-203`, `1176572-FLCK`),
- * so two codes sharing a base are one shoe in two colours while different bases are
- * different shoes. New Balance (`U7408XH`) and adidas (`KI9403`) encode the colour
- * inline with no separator, so the whole code stands as the base — which is strict, and
- * strict is the safe direction here.
- */
-export function styleCodeBase(sku: string | null): string | null {
-  if (!sku) return null;
-  const trimmed = sku.trim().toUpperCase();
-  const cut = trimmed.lastIndexOf('-');
-  const base = cut > 0 ? trimmed.slice(0, cut) : trimmed;
-  const cleaned = base.replace(/[^A-Z0-9]/g, '');
-  return cleaned.length >= 5 ? cleaned : null;
-}
-
-/**
  * Children's shoes share model names with adult ones — adidas sells "Campus 00s" and
  * "Campus 00s C", and their titles are 0.69 similar. Merging them would put a toddler
  * shoe in front of someone filtering size 44.
@@ -153,14 +135,17 @@ export function matchOffers(a: MatchCandidate, b: MatchCandidate): MatchResult |
   // and "NBC" in white are two products, and merging them hides one from the shopper.
   if (a.shopId !== undefined && a.shopId === b.shopId) return null;
 
-  // A code the manufacturer assigned outranks anything the title says. When both sides
-  // carry one and the model parts differ, these are different shoes however alike the
-  // names read: Sport Vision's "Nike Pegasus" (HV8121-200, 325 KM) and Buzz's "Nike
-  // Patike Pegasus" (IQ3435-045, 475 KM) score 1.0 on the title and are not the same
-  // shoe. Without this the fuzzy tier reads a stripped model name as the whole identity.
-  const baseA = styleCodeBase(a.sku);
-  const baseB = styleCodeBase(b.sku);
-  if (baseA && baseB && baseA !== baseB) return null;
+  // A code the manufacturer assigned outranks anything the title says. Both sides having
+  // one and reaching this line means tier 2 already found them unequal, so the titles are
+  // describing different shoes however alike they read — Sport Vision's "Nike Pegasus"
+  // (HV8121-200, 325 KM) and Buzz's "Nike Patike Pegasus" (IQ3435-045, 475 KM) both
+  // reduce to "Pegasus" and score 1.0.
+  //
+  // Codes differing only in their colourway suffix (IB1857-203 / IB1857-204) are rejected
+  // too: that is one model in two colours, and a card claiming two shops carry it would
+  // send a shopper after the red pair to a shop stocking the blue one. Colour is part of
+  // what a shoe is, so it is part of what a product is.
+  if (codeA && codeB) return null;
 
   if (!a.brand || !b.brand) return null;
   if (normalizeForSearch(a.brand) !== normalizeForSearch(b.brand)) return null;

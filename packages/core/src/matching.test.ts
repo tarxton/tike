@@ -8,7 +8,6 @@ import {
   normalizeStyleCode,
   similarity,
   sizeRangesOverlap,
-  styleCodeBase,
   type MatchCandidate,
 } from './matching';
 
@@ -32,28 +31,6 @@ describe('normalizeStyleCode', () => {
   it('rejects codes too short to be meaningful', () => {
     expect(normalizeStyleCode('AB1')).toBeNull();
     expect(normalizeStyleCode(null)).toBeNull();
-  });
-});
-
-describe('styleCodeBase', () => {
-  it('drops the colourway suffix so one shoe in two colours shares a base', () => {
-    expect(styleCodeBase('IB1857-203')).toBe(styleCodeBase('IB1857-204'));
-    expect(styleCodeBase('1176572-FLCK')).toBe(styleCodeBase('1176572-BYPB'));
-  });
-
-  it('keeps different models apart', () => {
-    expect(styleCodeBase('HV8121-200')).not.toBe(styleCodeBase('IQ3435-045'));
-  });
-
-  it('uses the whole code when the colour is encoded inline', () => {
-    // New Balance and adidas have no separator to cut at.
-    expect(styleCodeBase('U7408XH')).toBe('U7408XH');
-    expect(styleCodeBase('KI9403')).not.toBe(styleCodeBase('JI4462'));
-  });
-
-  it('rejects codes too short to be meaningful', () => {
-    expect(styleCodeBase('AB1')).toBeNull();
-    expect(styleCodeBase(null)).toBeNull();
   });
 });
 
@@ -202,9 +179,17 @@ describe('matchOffers and conflicting style codes', () => {
     expect(matchOffers(a, b)).toBeNull();
   });
 
-  it('still merges one shoe listed in two colours', () => {
+  it('refuses one model in two colours: colour is part of the product', () => {
+    // Same base, different colourway suffix. A card saying two shops carry this would
+    // send someone after the red pair to the shop holding the blue one.
     const a = candidate({ offerId: 1, shopId: 1, model: 'Cortez', sku: 'IB1857-203' });
     const b = candidate({ offerId: 2, shopId: 2, model: 'Cortez', sku: 'IB1857-204' });
+    expect(matchOffers(a, b)).toBeNull();
+  });
+
+  it('still matches on the title when only one side publishes a code', () => {
+    const a = candidate({ offerId: 1, shopId: 1, model: 'Cortez', sku: 'IB1857-203' });
+    const b = candidate({ offerId: 2, shopId: 2, model: 'Cortez', sku: null });
     expect(matchOffers(a, b)?.method).toBe('fuzzy');
   });
 
