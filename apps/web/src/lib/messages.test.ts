@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatPrice, formatSize, pluralResults } from './messages';
+import { formatPrice, formatSize, pluralResults, pluralShops, showingSubset } from './messages';
 
 describe('pluralResults', () => {
   it('uses the singular for counts ending in 1', () => {
@@ -33,5 +33,38 @@ describe('formatPrice', () => {
   it('uses the BiH convention', () => {
     expect(formatPrice(12990, 'BAM')).toBe('129,90 KM');
     expect(formatPrice(4999, 'EUR')).toBe('49,99 €');
+  });
+});
+
+describe('pluralShops', () => {
+  it('uses the singular for counts ending in 1', () => {
+    expect(pluralShops(1)).toBe('prodavnica');
+    expect(pluralShops(21)).toBe('prodavnica');
+  });
+
+  it('uses the few-form for 2 to 4', () => {
+    expect(pluralShops(2)).toBe('prodavnice');
+    expect(pluralShops(3)).toBe('prodavnice');
+    expect(pluralShops(4)).toBe('prodavnice');
+    expect(pluralShops(22)).toBe('prodavnice');
+  });
+
+  it('uses the many-form for 5 and up', () => {
+    for (const n of [5, 9, 10, 100]) {
+      expect(pluralShops(n)).toBe('prodavnica');
+    }
+  });
+
+  it('treats the teens as many, despite their last digit', () => {
+    // 11-14 take the many-form even though 1-4 do not — the usual BCS exception.
+    for (const n of [11, 12, 13, 14]) {
+      expect(pluralShops(n)).toBe('prodavnica');
+    }
+  });
+});
+
+describe('showingSubset', () => {
+  it('names both the page size and the true total', () => {
+    expect(showingSubset(48, 297)).toBe('Prikazano prvih 48 od 297.');
   });
 });
