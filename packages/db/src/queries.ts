@@ -81,6 +81,40 @@ function kidsFilter(includeKids: boolean | undefined) {
   )`;
 }
 
+/**
+ * The representative title with the category word stripped, for scoring only.
+ *
+ * Buzz prefixes "Patike" to every title and Sport Vision does not, so scoring the raw
+ * title ranks Buzz's whole catalogue below Sport Vision's on any query — a systematic
+ * bias with nothing to do with relevance. Space-padded `replace` rather than a regex
+ * word boundary, which Postgres would not honour here.
+ */
+const scoredTitle = sql`btrim(replace(' ' || unaccent(lower(b.title)) || ' ', ' patike ', ' '))`;
+
+/**
+ * Result order.
+ *
+ * Cheapest first is the promise of the site, so price leads whenever there is no query
+ * to be relevant to. With a query it does not: searching "cortez" and getting fourteen
+ * "Cortez TXT" listings before the plain Cortez — because they happen to cost 20 KM
+ * less — answers a question nobody asked.
+ *
+ * Relevance is therefore banded to one decimal rather than used raw: titles of roughly
+ * equal relevance stay ordered by price, and only a real difference in relevance
+ * outranks a cheaper price.
+ *
+ * Equal on both, the result covering more shops wins. That is the whole point of the
+ * site, and it costs the shopper nothing when the prices are identical anyway.
+ */
+function resultOrder(query: string | undefined) {
+  const trimmed = query?.trim();
+  const tail = sql`g.min_price asc, g.shop_count desc, g.group_key asc`;
+  if (!trimmed) return sql`order by ${tail}`;
+  return sql`order by
+      round(similarity(${scoredTitle}, unaccent(lower(${trimmed})))::numeric, 1) desc,
+      ${tail}`;
+}
+
 /** `size_eu in (45, 46)`, or nothing when no sizes are selected. */
 function sizeFilter(sizesEu: number[] | undefined) {
   if (!sizesEu || sizesEu.length === 0) return sql``;
@@ -173,7 +207,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
     from grouped g
     join candidate b on b.id = g.best_offer_id
     join shop s on s.id = b.shop_id
-    order by g.min_price asc, g.group_key asc
+    ${resultOrder(query)}
     limit ${limit} offset ${offset}
   `);
 
