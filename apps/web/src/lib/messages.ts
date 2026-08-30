@@ -36,6 +36,7 @@ export const t = {
   noResultsHint: 'Probaj drugi broj ili model.',
   clearFilters: 'Obriši filtere',
 
+  fromPrice: 'od',
   inShop: 'U prodavnici',
   goToShop: 'Idi u prodavnicu',
   availableSizes: 'Dostupno u brojevima',
@@ -54,6 +55,20 @@ export function pluralResults(count: number): string {
   const lastTwo = count % 100;
   const last = count % 10;
   return last === 1 && lastTwo !== 11 ? t.resultOne : t.results;
+}
+
+/**
+ * BCS plural for "prodavnica".
+ *
+ * 1 prodavnica, 2-4 prodavnice, 5+ prodavnica — with the usual 11-14 exception, which
+ * takes the many-form despite ending in 1-4.
+ */
+export function pluralShops(count: number): string {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  if (last === 1 && lastTwo !== 11) return 'prodavnica';
+  if (last >= 2 && last <= 4 && !(lastTwo >= 12 && lastTwo <= 14)) return 'prodavnice';
+  return 'prodavnica';
 }
 
 /**

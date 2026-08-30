@@ -1,8 +1,13 @@
 import type { SearchResult } from '@tike/db';
-import { formatPrice, formatSize, t } from '@/lib/messages';
+import { formatPrice, formatSize, pluralShops, t } from '@/lib/messages';
 
 /**
- * One listing.
+ * One result: either a shoe several shops carry, or a single unmatched listing.
+ *
+ * Both render as one card. While matching covers a fraction of the catalogue, hiding
+ * unmatched listings would hide most of the catalogue, so a lone offer is simply a
+ * group of one — the price reads as an exact price rather than "od", and the shop is
+ * named instead of counted.
  *
  * Images are hotlinked from the shop for now; the Phase 2 image pipeline stores
  * resized copies in R2 and serves them from our own CDN.
@@ -10,6 +15,7 @@ import { formatPrice, formatSize, t } from '@/lib/messages';
 export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: number[] }) {
   const shownSizes = offer.sizesEu.slice(0, 10);
   const extra = offer.sizesEu.length - shownSizes.length;
+  const multiShop = offer.shopCount > 1;
 
   return (
     <article className="group flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white transition hover:border-neutral-400">
@@ -53,6 +59,7 @@ export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: 
                   offer.discountPercent === null ? 'text-neutral-900' : 'text-red-600',
                 ].join(' ')}
               >
+                {multiShop ? `${t.fromPrice} ` : ''}
                 {formatPrice(offer.priceMinor, offer.currency)}
               </span>
 
@@ -67,7 +74,13 @@ export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: 
                 </>
               ) : null}
             </div>
-            <span className="text-xs text-neutral-500">{offer.shopName}</span>
+            {multiShop ? (
+              <span className="text-xs font-medium text-neutral-700">
+                {offer.shopCount} {pluralShops(offer.shopCount)}
+              </span>
+            ) : (
+              <span className="text-xs text-neutral-500">{offer.shopName}</span>
+            )}
           </div>
         </div>
       </a>

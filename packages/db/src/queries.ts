@@ -28,8 +28,10 @@ export interface SearchResult {
   currency: string;
   /** In-stock EU sizes for this listing, ascending. */
   sizesEu: number[];
-  /** Always 1 today; becomes the number of shops carrying the shoe after matching. */
+  /** How many shops carry this shoe. 1 for an unmatched listing. */
   shopCount: number;
+  /** Null while the listing is unmatched, so the card is really just one shop's offer. */
+  productId: number | null;
 }
 
 /**
@@ -105,43 +107,73 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
   const wantsKids = includeKids || (sizesEu ?? []).some((s) => s < ADULT_MIN_SIZE);
 
   const rows = await db().execute(sql`
+    -- Filter at the offer level first: a size or brand filter is a statement about a
+    -- shop's listing, and grouping before filtering would let one shop's stock vouch
+    -- for another's.
+    with candidate as (
+      select
+        o.id, o.shop_id, o.product_id, o.title, o.raw_brand, o.url, o.image_url,
+        o.price_minor, o.original_price_minor, o.currency,
+        -- Matched offers collapse onto their product; unmatched ones stay their own
+        -- group, so nothing disappears from the results while coverage is partial.
+        coalesce('p' || o.product_id::text, 'o' || o.id::text) as group_key
+      from offer o
+      join shop s on s.id = o.shop_id
+      where s.active
+        and o.in_stock
+        ${sizeFilter(sizesEu)}
+        ${kidsFilter(wantsKids)}
+        ${brand === undefined ? sql`` : sql`and unaccent(lower(o.raw_brand)) = unaccent(lower(${brand}))`}
+        ${
+          query === undefined || query.trim() === ''
+            ? sql``
+            : sql`and unaccent(lower(o.title)) like unaccent(lower(${'%' + query.trim() + '%'}))`
+        }
+    ),
+    grouped as (
+      select
+        group_key,
+        min(price_minor) as min_price,
+        count(distinct shop_id)::int as shop_count,
+        -- The cheapest offer represents the group: it supplies the image, title and
+        -- the link, so "od 215 KM" and the click-out always agree.
+        (array_agg(id order by price_minor asc, id asc))[1] as best_offer_id
+      from candidate
+      group by group_key
+    )
     select
-      o.id            as "offerId",
+      b.id            as "offerId",
+      b.product_id    as "productId",
       s.slug          as "shopSlug",
       s.name          as "shopName",
-      o.title         as "title",
-      o.raw_brand     as "brand",
-      o.url           as "url",
-      o.image_url     as "imageUrl",
-      o.price_minor          as "priceMinor",
-      o.original_price_minor as "originalPriceMinor",
-      o.currency::text as "currency",
-      -- Total across every page, in the same round trip. A separate count query would
-      -- double the latency and could disagree with the page under concurrent writes.
-      count(*) over() as "totalCount",
+      b.title         as "title",
+      b.raw_brand     as "brand",
+      b.url           as "url",
+      b.image_url     as "imageUrl",
+      g.min_price     as "priceMinor",
+      b.original_price_minor as "originalPriceMinor",
+      b.currency::text as "currency",
+      g.shop_count    as "shopCount",
+      -- Sizes are the union across the group: a shoe is available in 44 if any shop
+      -- in the group has 44, which is the whole point of comparing shops.
       -- json_agg, not array_agg: the HTTP driver hands back Postgres arrays as the
       -- raw string "{40.00,41.00}", whereas JSON arrives as a real array.
       coalesce(
         (
-          select json_agg(f.size_eu order by f.size_eu)
+          select json_agg(distinct f.size_eu order by f.size_eu)
           from offer_size f
-          where f.offer_id = o.id and f.in_stock
+          join candidate c on c.id = f.offer_id
+          where c.group_key = g.group_key and f.in_stock
         ),
         '[]'::json
-      ) as "sizesEu"
-    from offer o
-    join shop s on s.id = o.shop_id
-    where s.active
-      and o.in_stock
-      ${sizeFilter(sizesEu)}
-      ${kidsFilter(wantsKids)}
-      ${brand === undefined ? sql`` : sql`and unaccent(lower(o.raw_brand)) = unaccent(lower(${brand}))`}
-      ${
-        query === undefined || query.trim() === ''
-          ? sql``
-          : sql`and unaccent(lower(o.title)) like unaccent(lower(${'%' + query.trim() + '%'}))`
-      }
-    order by o.price_minor asc
+      ) as "sizesEu",
+      -- Total across every page, in the same round trip. A separate count query would
+      -- double the latency and could disagree with the page under concurrent writes.
+      count(*) over() as "totalCount"
+    from grouped g
+    join candidate b on b.id = g.best_offer_id
+    join shop s on s.id = b.shop_id
+    order by g.min_price asc, g.group_key asc
     limit ${limit} offset ${offset}
   `);
 
@@ -154,6 +186,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
     const onSale = originalPriceMinor !== null && originalPriceMinor > priceMinor;
     return {
       offerId: Number(r.offerId),
+      productId: r.productId === null ? null : Number(r.productId),
       shopSlug: String(r.shopSlug),
       shopName: String(r.shopName),
       title: String(r.title),
@@ -167,12 +200,13 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
         : null,
       currency: String(r.currency),
       sizesEu: Array.isArray(r.sizesEu) ? r.sizesEu.map(Number) : [],
-      shopCount: 1,
+      shopCount: Number(r.shopCount),
     };
   });
 
   // No rows means no window to count over, so the total is genuinely zero.
-  return { items, total: raw.length === 0 ? 0 : Number(raw[0].totalCount) };
+  const first = raw[0];
+  return { items, total: first === undefined ? 0 : Number(first.totalCount) };
 }
 
 /**
@@ -204,7 +238,12 @@ export async function availableBrands(
   const { sizesEu, query, includeKids } = params;
   const wantsKids = includeKids || (sizesEu ?? []).some((s) => s < ADULT_MIN_SIZE);
   const rows = await db().execute(sql`
-    select o.raw_brand as "brand", count(*)::int as "count"
+    -- Counts groups, not offers, so a facet count matches the result count the header
+    -- shows after the same click. Counting rows here would say "Nike 73" and then land
+    -- on a page reporting 68.
+    select
+      o.raw_brand as "brand",
+      count(distinct coalesce('p' || o.product_id::text, 'o' || o.id::text))::int as "count"
     from offer o
     join shop s on s.id = o.shop_id
     where o.in_stock and s.active and o.raw_brand is not null
@@ -216,7 +255,7 @@ export async function availableBrands(
           : sql`and unaccent(lower(o.title)) like unaccent(lower(${'%' + query.trim() + '%'}))`
       }
     group by o.raw_brand
-    order by count(*) desc, o.raw_brand asc
+    order by 2 desc, o.raw_brand asc
   `);
   return (rows.rows as Record<string, unknown>[]).map((r) => ({
     brand: String(r.brand),
