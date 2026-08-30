@@ -142,3 +142,38 @@ describe('parseNbshop', () => {
     ).toThrow(ParseError);
   });
 });
+
+/**
+ * The architectural claim, held to account.
+ *
+ * "Adding a shop on a known platform is a config row, not code." Sport Reality runs the
+ * same NBSHOP 5.9.58 as Buzz, and the only thing that made it a one-line change was that
+ * this adapter parsed its pages unmodified. If a future edit breaks that, the promise is
+ * broken too — so a second shop's fixture guards it.
+ */
+describe('parseNbshop across shops', () => {
+  const srDir = join(import.meta.dirname, '../../fixtures/sportreality');
+  const srManifest: { file: string; url: string }[] = JSON.parse(
+    readFileSync(join(srDir, 'manifest.json'), 'utf8'),
+  );
+
+  it('parses a different NBSHOP shop with no adapter changes', () => {
+    const entry = srManifest[0]!;
+    const offer = parseNbshop(readFileSync(join(srDir, entry.file), 'utf8'), entry.url);
+
+    expect(offer.brand).toBe('Skechers');
+    expect(offer.sku).toBe('183530-OLV');
+    expect(offer.externalId).toBe('137119');
+    expect(offer.priceRaw).toBe('129.00');
+  });
+
+  it('reads per-size barcodes and out-of-stock sizes from the second shop too', () => {
+    // The two things Office Shoes cannot give us: a GTIN per size, and sizes the shop
+    // stocks but has sold out of.
+    const entry = srManifest[0]!;
+    const offer = parseNbshop(readFileSync(join(srDir, entry.file), 'utf8'), entry.url);
+
+    expect(offer.sizes.length).toBeGreaterThan(offer.sizes.filter((s) => s.inStock).length);
+    expect(offer.sizes.filter((s) => s.gtin !== null).length).toBeGreaterThan(0);
+  });
+});

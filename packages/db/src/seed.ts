@@ -27,6 +27,17 @@ const shops = [
     crawlConfig: { pathAllow: ['patike'] },
   },
   {
+    // Runs NBSHOP 5.9.58, the same version as Buzz, so the existing adapter covers it
+    // unchanged — this row is the entire change. Unlike Buzz and Sport Vision it is not
+    // in their corporate group, so its prices move independently.
+    slug: 'sportreality',
+    name: 'Sport Reality',
+    baseUrl: 'https://www.sportreality.ba',
+    platform: 'nbshop' as const,
+    sitemapUrl: 'https://www.sportreality.ba/files/sitemap/BIH_ba/sitemap.xml',
+    crawlConfig: { pathAllow: ['patike'] },
+  },
+  {
     slug: 'officeshoes',
     name: 'Office Shoes',
     baseUrl: 'https://www.officeshoes.ba',
