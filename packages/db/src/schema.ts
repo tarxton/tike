@@ -23,7 +23,14 @@ import {
  *            inbound links must survive).
  */
 
-export const platformEnum = pgEnum('platform', ['nbshop', 'magento2', 'woo', 'shopify', 'feed']);
+export const platformEnum = pgEnum('platform', [
+  'nbshop',
+  'magento2',
+  'woo',
+  'shopify',
+  'officeshoes',
+  'feed',
+]);
 
 export const genderEnum = pgEnum('gender', ['men', 'women', 'unisex', 'kids']);
 

@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
 import type { CheerioAPI } from 'cheerio';
+import { ParseError } from '../errors';
 import { parsedOfferSchema, type Gender, type ParsedOffer, type RawSize } from '@tike/contracts';
 
 /**
@@ -13,16 +14,6 @@ import { parsedOfferSchema, type Gender, type ParsedOffer, type RawSize } from '
  *   - schema.org Product JSON-LD for identity and price
  *   - the size list in the DOM for per-size availability, which JSON-LD does not carry
  */
-
-export class ParseError extends Error {
-  constructor(
-    message: string,
-    readonly url: string,
-  ) {
-    super(`${message} (${url})`);
-    this.name = 'ParseError';
-  }
-}
 
 interface JsonLdProduct {
   '@type'?: string;

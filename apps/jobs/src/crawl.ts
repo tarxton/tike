@@ -14,8 +14,13 @@ import {
   ForbiddenError,
   ParseError,
   PoliteFetcher,
+  XHR_HEADERS,
   filterByPath,
+  filterByPathContains,
   isSitemapIndex,
+  isSoftNotFound,
+  listingPageUrl,
+  parseListingProducts,
   parseSitemapLocs,
   parserFor,
   selectProductSitemap,
@@ -42,11 +47,63 @@ if (!shopSlug) {
   process.exit(1);
 }
 
+/** The polite path: one request, and the list the shop publishes for crawlers. */
+async function discoverFromSitemap(fetcher: PoliteFetcher, sitemapUrl: string): Promise<string[]> {
+  let xml = await fetcher.get(sitemapUrl);
+  if (isSitemapIndex(xml)) {
+    const productSitemap = selectProductSitemap(parseSitemapLocs(xml));
+    if (!productSitemap) throw new Error('sitemap index contains no product.xml');
+    console.log(`sitemap index -> ${productSitemap}`);
+    xml = await fetcher.get(productSitemap);
+  }
+  return parseSitemapLocs(xml);
+}
+
+/**
+ * The fallback for shops with no sitemap: walk each category's own pagination.
+ *
+ * Stops a category as soon as a page yields nothing new. That covers both ends of the
+ * catalogue honestly — Office Shoes answers past-the-end requests with its homepage and
+ * a 200, so "no products in the response" is the only reliable end marker, and `maxPages`
+ * guards against a shop that would keep answering forever.
+ */
+async function discoverFromCategories(
+  fetcher: PoliteFetcher,
+  baseUrl: string,
+  discovery: { categories: string[]; pageSize: number; maxPages: number },
+): Promise<string[]> {
+  const found = new Set<string>();
+
+  for (const category of discovery.categories) {
+    let pagesWalked = 0;
+    for (let page = 0; page < discovery.maxPages; page += 1) {
+      const url = listingPageUrl(baseUrl, category, page);
+      const html = await fetcher.get(url, XHR_HEADERS);
+      if (isSoftNotFound(html)) break;
+
+      const products = parseListingProducts(html, baseUrl);
+      const before = found.size;
+      for (const p of products) found.add(p);
+      pagesWalked += 1;
+
+      // A page of entirely familiar products means the walk has looped or run out.
+      if (found.size === before) break;
+    }
+    console.log(`  ${category}: ${pagesWalked} pages, ${found.size} urls so far`);
+  }
+
+  return [...found];
+}
+
 await withDb(async (db) => {
   const [row] = await db.select().from(shop).where(eq(shop.slug, shopSlug)).limit(1);
   if (!row) throw new Error(`unknown shop "${shopSlug}" — seed it first`);
   if (!row.active) throw new Error(`shop "${shopSlug}" is inactive; refusing to crawl`);
-  if (!row.sitemapUrl) throw new Error(`shop "${shopSlug}" has no sitemap configured`);
+
+  const config = crawlConfigSchema.parse(row.crawlConfig ?? {});
+  if (config.discovery.kind === 'sitemap' && !row.sitemapUrl) {
+    throw new Error(`shop "${shopSlug}" has no sitemap configured`);
+  }
 
   const fetcher = new PoliteFetcher(row.baseUrl, row.minDelayMs);
   const { crawlDelayMs, effectiveDelayMs } = await fetcher.init();
@@ -55,24 +112,22 @@ await withDb(async (db) => {
       `effective delay=${effectiveDelayMs}ms`,
   );
 
-  // Resolve the sitemap index down to the product sitemap.
-  let sitemapXml = await fetcher.get(row.sitemapUrl);
-  if (isSitemapIndex(sitemapXml)) {
-    const productSitemap = selectProductSitemap(parseSitemapLocs(sitemapXml));
-    if (!productSitemap) throw new Error('sitemap index contains no product.xml');
-    console.log(`sitemap index -> ${productSitemap}`);
-    sitemapXml = await fetcher.get(productSitemap);
-  }
+  const discovered =
+    config.discovery.kind === 'sitemap'
+      ? await discoverFromSitemap(fetcher, row.sitemapUrl!)
+      : await discoverFromCategories(fetcher, row.baseUrl, config.discovery);
 
-  const allUrls = parseSitemapLocs(sitemapXml);
   // Shops list their whole catalogue; keep only the categories tike covers. Apparel is
   // out of scope, not a parse failure, so it must be excluded before fetching.
-  const config = crawlConfigSchema.parse(row.crawlConfig ?? {});
-  const inScope = filterByPath(allUrls, config.pathAllow);
+  const inScope = filterByPathContains(
+    filterByPath(discovered, config.pathAllow),
+    config.pathContains,
+  );
   const urls = inScope.slice(0, Number.isFinite(limit) ? limit : undefined);
   console.log(
-    `sitemap lists ${allUrls.length} urls; ${inScope.length} in scope ` +
-      `(${config.pathAllow.join(', ') || 'no filter'}); crawling ${urls.length}`,
+    `discovery found ${discovered.length} urls; ${inScope.length} in scope ` +
+      `(${[...config.pathAllow, ...config.pathContains].join(', ') || 'no filter'}); ` +
+      `crawling ${urls.length}`,
   );
 
   const [run] = await db

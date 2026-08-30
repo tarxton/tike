@@ -8,7 +8,14 @@ import { z } from 'zod';
 export const genderSchema = z.enum(['men', 'women', 'unisex', 'kids']);
 export type Gender = z.infer<typeof genderSchema>;
 
-export const platformSchema = z.enum(['nbshop', 'magento2', 'woo', 'shopify', 'feed']);
+export const platformSchema = z.enum([
+  'nbshop',
+  'magento2',
+  'woo',
+  'shopify',
+  'officeshoes',
+  'feed',
+]);
 export type Platform = z.infer<typeof platformSchema>;
 
 /**
@@ -21,6 +28,36 @@ export type Platform = z.infer<typeof platformSchema>;
 export const crawlConfigSchema = z.object({
   /** First path segment must be one of these, e.g. ["patike"]. Empty means no filter. */
   pathAllow: z.array(z.string().min(1)).default([]),
+  /**
+   * Path must contain one of these anywhere, e.g. ["patike"].
+   *
+   * For shops that do not put the category in its own path segment. NBSHOP gives
+   * `/patike/123-nike-air`, which `pathAllow` handles; Office Shoes bakes the type into
+   * the product slug — `/cipele-guess-plitke-patike-cribe/75024` — where the first
+   * segment is unique per product and matches nothing.
+   */
+  pathContains: z.array(z.string().min(1)).default([]),
+  /**
+   * How product URLs are found.
+   *
+   * A sitemap is the polite default and the only thing NBSHOP needs. Office Shoes
+   * publishes none — unknown paths return the homepage with a 200 rather than a 404 —
+   * so its categories have to be walked page by page instead.
+   */
+  discovery: z
+    .discriminatedUnion('kind', [
+      z.object({ kind: z.literal('sitemap') }),
+      z.object({
+        kind: z.literal('paginated'),
+        /** Category listing paths, each walked until it stops returning products. */
+        categories: z.array(z.string().min(1)).min(1),
+        /** Products per page, as the listing URL itself declares. */
+        pageSize: z.number().int().positive().default(48),
+        /** Refuses to walk forever if a shop keeps answering 200 with content. */
+        maxPages: z.number().int().positive().default(40),
+      }),
+    ])
+    .default({ kind: 'sitemap' }),
 });
 export type CrawlConfig = z.infer<typeof crawlConfigSchema>;
 

@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseNbshop, ParseError } from './nbshop';
+import { ParseError } from '../errors';
+import { parseNbshop } from './nbshop';
 
 /**
  * Fixture-driven: every assertion runs against real product HTML captured from

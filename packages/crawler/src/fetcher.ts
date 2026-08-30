@@ -50,7 +50,7 @@ export class PoliteFetcher {
    * Fetch one URL. Requests are serialized per instance, so concurrency against a
    * single shop is 1 by construction.
    */
-  async get(url: string): Promise<string> {
+  async get(url: string, extraHeaders: Record<string, string> = {}): Promise<string> {
     if (!this.isAllowed(url)) {
       throw new RobotsDisallowedError(`robots.txt disallows ${url}`);
     }
@@ -58,7 +58,9 @@ export class PoliteFetcher {
       const wait = this.lastRequestAt + this.minDelayMs - Date.now();
       if (wait > 0) await sleep(wait);
       this.lastRequestAt = Date.now();
-      const res = await fetch(url, { headers: { 'user-agent': USER_AGENT } });
+      // The User-Agent is set last so no caller can quietly replace our identity with a
+      // browser's; extra headers exist for endpoints that need one, not for disguise.
+      const res = await fetch(url, { headers: { ...extraHeaders, 'user-agent': USER_AGENT } });
       if (res.status === 403) {
         throw new ForbiddenError(
           `403 from ${url}: the shop is refusing an identified crawler. Stop crawling it ` +
