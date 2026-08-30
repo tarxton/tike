@@ -17,7 +17,6 @@ export const t = {
   showKids: 'Prikaži dječije brojeve',
   hideKids: 'Sakrij dječije brojeve',
   multiSizeHint: 'Možeš odabrati više brojeva odjednom.',
-  applyFilters: 'Prikaži rezultate',
   discount: 'Popust',
   oldPrice: 'Stara cijena',
 

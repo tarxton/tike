@@ -12,6 +12,11 @@ import { ADULT_MIN_SIZE } from '@/lib/sizes';
  *
  * Sizes are checkboxes rather than submit buttons so ticking one composes the query
  * instead of running it. Nothing here needs client-side JavaScript.
+ *
+ * One submit button, and it sits after the sizes rather than beside the search box.
+ * A button glued to the input reads as "search this text" and hides the fact that the
+ * ticked sizes travel with it; placing the only button last makes it unambiguous that
+ * it submits everything above.
  */
 export function Filters({
   sizes,
@@ -43,22 +48,14 @@ export function Filters({
       {brand ? <input type="hidden" name="brend" value={brand} /> : null}
       <input type="hidden" name="returnTo" value={returnTo} />
 
-      <div className="flex w-full max-w-xl gap-2">
-        <input
-          type="search"
-          name="q"
-          defaultValue={query ?? ''}
-          placeholder={t.searchPlaceholder}
-          aria-label={t.search}
-          className="min-w-0 flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus-visible:border-neutral-900 focus-visible:ring-2 focus-visible:ring-neutral-900/10 focus-visible:outline-none"
-        />
-        <button
-          type="submit"
-          className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-        >
-          {t.search}
-        </button>
-      </div>
+      <input
+        type="search"
+        name="q"
+        defaultValue={query ?? ''}
+        placeholder={t.searchPlaceholder}
+        aria-label={t.search}
+        className="w-full max-w-xl rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus-visible:border-neutral-900 focus-visible:ring-2 focus-visible:ring-neutral-900/10 focus-visible:outline-none"
+      />
 
       <fieldset>
         <legend className="mb-2 text-sm font-medium text-neutral-700">{t.chooseSize}</legend>
@@ -87,9 +84,9 @@ export function Filters({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <button
           type="submit"
-          className="rounded-lg border border-neutral-900 px-4 py-2 text-sm font-medium text-neutral-900 transition hover:bg-neutral-900 hover:text-white focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+          className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
         >
-          {t.applyFilters}
+          {t.search}
         </button>
 
         {selected.length > 0 || query ? (
