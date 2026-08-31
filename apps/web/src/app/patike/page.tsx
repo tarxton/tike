@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { availableBrands, availableSizes, searchOffers } from '@tike/db';
 import { Filters } from '@/components/filters';
 import { OfferCard } from '@/components/offer-card';
-import { formatSize, pluralResults, showingSubset, t } from '@/lib/messages';
+import { Pager } from '@/components/pager';
+import { formatCount, formatSize, pluralResults, showingRange, t } from '@/lib/messages';
 import { getSizes } from '@/lib/size';
 import { parseSizes } from '@/lib/sizes';
 
@@ -36,14 +37,29 @@ export default async function Results({
   const brand = first('brend');
   const query = first('q');
   const showKids = first('djecije') === '1';
+  const page = parsePage(first('strana'));
 
   const [results, sizes, brands] = await Promise.all([
-    searchOffers({ sizesEu: selected, brand, query, includeKids: showKids }),
+    searchOffers({
+      sizesEu: selected,
+      brand,
+      query,
+      includeKids: showKids,
+      limit: PAGE_SIZE,
+      offset: (page - 1) * PAGE_SIZE,
+    }),
     availableSizes(),
     availableBrands({ sizesEu: selected, query, includeKids: showKids }),
   ]);
 
   const hasFilters = selected.length > 0 || Boolean(brand) || Boolean(query);
+  const totalPages = Math.max(1, Math.ceil(results.total / PAGE_SIZE));
+  const firstOnPage = (page - 1) * PAGE_SIZE + 1;
+  const lastOnPage = firstOnPage + results.items.length - 1;
+  // A page past the end returns no rows, and with no rows there is no window to count
+  // over — so `total` reads 0 and an over-shot page is indistinguishable from a search
+  // that genuinely matched nothing. Tell them apart by the page number.
+  const pastTheEnd = results.items.length === 0 && page > 1;
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
@@ -52,7 +68,9 @@ export default async function Results({
           {t.siteName}
         </Link>
         <p className="text-sm text-neutral-600">
-          <strong className="font-semibold text-neutral-900 tabular-nums">{results.total}</strong>{' '}
+          <strong className="font-semibold text-neutral-900 tabular-nums">
+            {formatCount(results.total)}
+          </strong>{' '}
           {pluralResults(results.total)}
           {selected.length > 0 ? (
             <>
@@ -106,7 +124,17 @@ export default async function Results({
         ))}
       </nav>
 
-      {results.items.length === 0 ? (
+      {pastTheEnd ? (
+        <div className="rounded-xl border border-dashed border-neutral-300 px-6 py-16 text-center">
+          <p className="font-medium text-neutral-900">{t.emptyPage}</p>
+          <Link
+            href={buildHref({ sizes: selected, brand, query, kids: showKids })}
+            className="mt-4 inline-block text-sm underline underline-offset-4 hover:text-neutral-900"
+          >
+            {t.backToFirstPage}
+          </Link>
+        </div>
+      ) : results.items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-neutral-300 px-6 py-16 text-center">
           <p className="font-medium text-neutral-900">{t.noResults}</p>
           <p className="mt-1 text-sm text-neutral-600">{t.noResultsHint}</p>
@@ -129,10 +157,17 @@ export default async function Results({
         </ul>
       )}
 
-      {results.total > results.items.length ? (
-        <p className="mt-6 text-center text-sm text-neutral-600">
-          {showingSubset(results.items.length, results.total)}
-        </p>
+      {results.items.length > 0 && totalPages > 1 ? (
+        <>
+          <p className="mt-6 text-center text-sm text-neutral-600">
+            {showingRange(firstOnPage, lastOnPage, results.total)}
+          </p>
+          <Pager
+            page={page}
+            totalPages={totalPages}
+            hrefFor={(p) => buildHref({ sizes: selected, brand, query, kids: showKids, page: p })}
+          />
+        </>
       ) : null}
 
       <footer className="mt-12 border-t border-neutral-200 pt-6 text-xs text-neutral-500">
@@ -143,22 +178,35 @@ export default async function Results({
   );
 }
 
+/** Results per page. Also the page size the pager and the range notice count in. */
+const PAGE_SIZE = 48;
+
+/** `?strana=3`. Anything that is not a whole page number is page one. */
+function parsePage(raw: string | undefined): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 ? n : 1;
+}
+
 function buildHref({
   sizes,
   brand,
   query,
   kids,
+  page,
 }: {
   sizes: number[];
   brand?: string;
   query?: string;
   kids?: boolean;
+  page?: number;
 }): string {
   const sp = new URLSearchParams();
   if (sizes.length > 0) sp.set('velicina', sizes.join(','));
   if (brand) sp.set('brend', brand);
   if (query) sp.set('q', query);
   if (kids) sp.set('djecije', '1');
+  // Page one is the bare URL: a filter change should never land on page 7 of nothing.
+  if (page && page > 1) sp.set('strana', String(page));
   const qs = sp.toString();
   return qs ? `/patike?${qs}` : '/patike';
 }

@@ -36,6 +36,12 @@ export const t = {
   noResultsHint: 'Probaj drugi broj ili model.',
   clearFilters: 'Obriši filtere',
 
+  previousPage: 'Prethodna',
+  nextPage: 'Sljedeća',
+  page: 'Stranica',
+  emptyPage: 'Nema rezultata na toj stranici.',
+  backToFirstPage: 'Nazad na prvu stranicu',
+
   inShop: 'U prodavnici',
   goToShop: 'Idi u prodavnicu',
   availableSizes: 'Dostupno u brojevima',
@@ -70,14 +76,14 @@ export function pluralShops(count: number): string {
   return 'prodavnica';
 }
 
-/**
- * "Prikazano prvih 48 od 297." — shown when the match set is larger than one page.
- *
- * Until pagination exists the rest are unreachable, so say so rather than letting the
- * grid look like the whole answer.
- */
-export function showingSubset(shown: number, total: number): string {
-  return `Prikazano prvih ${shown} od ${total}.`;
+/** "Prikazano 49-96 od 1.207." — which slice of the whole set is on screen. */
+export function showingRange(from: number, to: number, total: number): string {
+  return `Prikazano ${from}-${to} od ${formatCount(total)}.`;
+}
+
+/** Thousands separator, BiH style: 1.207 rather than 1,207. */
+export function formatCount(n: number): string {
+  return n.toLocaleString('de-DE');
 }
 
 /** "12990" -> "129,90 KM" */

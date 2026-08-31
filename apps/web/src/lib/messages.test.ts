@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { formatPrice, formatSize, pluralResults, pluralShops, showingSubset } from './messages';
+import {
+  formatCount,
+  formatPrice,
+  formatSize,
+  pluralResults,
+  pluralShops,
+  showingRange,
+} from './messages';
 
 describe('pluralResults', () => {
   it('uses the singular for counts ending in 1', () => {
@@ -63,8 +70,16 @@ describe('pluralShops', () => {
   });
 });
 
-describe('showingSubset', () => {
-  it('names both the page size and the true total', () => {
-    expect(showingSubset(48, 297)).toBe('Prikazano prvih 48 od 297.');
+describe('showingRange', () => {
+  it('names which slice of the whole set is on screen', () => {
+    expect(showingRange(49, 96, 1207)).toBe('Prikazano 49-96 od 1.207.');
+  });
+});
+
+describe('formatCount', () => {
+  it('groups thousands the BiH way', () => {
+    // 1.207, not 1,207 — the comma is the decimal separator here.
+    expect(formatCount(1207)).toBe('1.207');
+    expect(formatCount(48)).toBe('48');
   });
 });
