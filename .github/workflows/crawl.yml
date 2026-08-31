@@ -78,13 +78,25 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      - name: Check the database secrets
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: pnpm --filter @tike/jobs check-env:ci
+
       - name: Crawl ${{ matrix.shop }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
           # Identifies us to every shop, with somewhere to complain to.
           CRAWLER_USER_AGENT: 'tike-bot/0.1 (+https://github.com/tarxton/tike)'
-        run: pnpm --filter @tike/jobs crawl:ci ${{ matrix.shop }} 2>&1 | tee crawl-${{ matrix.shop }}.log
+        # pipefail because the exit status of a pipeline is `tee`'s, and without it a
+        # crawl that died on the first request reported success — which would have made
+        # the breaker and the issue-filing below unreachable.
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --filter @tike/jobs crawl:ci ${{ matrix.shop }} 2>&1 | tee crawl-${{ matrix.shop }}.log
 
       - name: Keep the log
         if: always()
@@ -159,6 +171,12 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+
+      - name: Check the database secrets
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: pnpm --filter @tike/jobs check-env:ci
 
       - name: Match offers into products
         env:

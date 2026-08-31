@@ -10,6 +10,8 @@
     "match": "tsx --env-file=../../.env.local src/match.ts",
     "list-shops": "tsx --env-file=../../.env.local src/list-shops.ts",
     "list-shops:ci": "tsx src/list-shops.ts",
+    "check-env": "tsx --env-file=../../.env.local src/check-env.ts",
+    "check-env:ci": "tsx src/check-env.ts",
     "crawl:ci": "tsx src/crawl.ts",
     "match:ci": "tsx src/match.ts"
   },
