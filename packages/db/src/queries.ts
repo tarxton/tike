@@ -84,6 +84,36 @@ function kidsFilter(includeKids: boolean | undefined) {
 }
 
 /**
+ * The title reduced to letters and digits, for matching only.
+ *
+ * Punctuation inside a model name is the shop's typography, not part of what the shopper
+ * is looking for: "p6000" and "p-6000" are the same request, and 235 titles in the
+ * catalogue carry an intra-word hyphen or dot (Gel-NYC, XT-6, Hoops 4.0). Folding both
+ * sides means the search box stops caring.
+ */
+const foldedTitle = sql`regexp_replace(unaccent(lower(o.title)), '[^a-z0-9]', '', 'g')`;
+
+/**
+ * Every word of the query must appear in the folded title.
+ *
+ * Words rather than the whole string, because shops interleave their own: Buzz writes
+ * "Nike Patike NIKE P-6000", so a contiguous match on "nike p-6000" found 5 of the 20
+ * listings that are plainly that shoe. The tokens are folded by the same SQL expression
+ * as the title, so the two can never drift apart.
+ */
+function titleFilter(query: string | undefined) {
+  const tokens = (query ?? '').trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return sql``;
+  return sql.join(
+    tokens.map(
+      (t) =>
+        sql`and ${foldedTitle} like '%' || regexp_replace(unaccent(lower(${t})), '[^a-z0-9]', '', 'g') || '%'`,
+    ),
+    sql` `,
+  );
+}
+
+/**
  * The representative title with the category word stripped, for scoring only.
  *
  * Buzz prefixes "Patike" to every title and Sport Vision does not, so scoring the raw
@@ -91,7 +121,7 @@ function kidsFilter(includeKids: boolean | undefined) {
  * bias with nothing to do with relevance. Space-padded `replace` rather than a regex
  * word boundary, which Postgres would not honour here.
  */
-const scoredTitle = sql`btrim(replace(' ' || unaccent(lower(b.title)) || ' ', ' patike ', ' '))`;
+const scoredTitle = sql`btrim(replace(' ' || regexp_replace(unaccent(lower(b.title)), '[^a-z0-9 ]', '', 'g') || ' ', ' patike ', ' '))`;
 
 /**
  * Result order.
@@ -113,7 +143,7 @@ function resultOrder(query: string | undefined) {
   const tail = sql`g.min_price asc, g.shop_count desc, g.group_key asc`;
   if (!trimmed) return sql`order by ${tail}`;
   return sql`order by
-      round(similarity(${scoredTitle}, unaccent(lower(${trimmed})))::numeric, 1) desc,
+      round(similarity(${scoredTitle}, regexp_replace(unaccent(lower(${trimmed})), '[^a-z0-9 ]', '', 'g'))::numeric, 1) desc,
       ${tail}`;
 }
 
@@ -160,11 +190,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
         ${sizeFilter(sizesEu)}
         ${kidsFilter(wantsKids)}
         ${brand === undefined ? sql`` : sql`and unaccent(lower(o.raw_brand)) = unaccent(lower(${brand}))`}
-        ${
-          query === undefined || query.trim() === ''
-            ? sql``
-            : sql`and unaccent(lower(o.title)) like unaccent(lower(${'%' + query.trim() + '%'}))`
-        }
+        ${titleFilter(query)}
     ),
     grouped as (
       select
@@ -290,11 +316,7 @@ export async function availableBrands(
     where o.in_stock and s.active and o.raw_brand is not null
       ${sizeFilter(sizesEu)}
       ${kidsFilter(wantsKids)}
-      ${
-        query === undefined || query.trim() === ''
-          ? sql``
-          : sql`and unaccent(lower(o.title)) like unaccent(lower(${'%' + query.trim() + '%'}))`
-      }
+      ${titleFilter(query)}
     group by o.raw_brand
     order by 2 desc, o.raw_brand asc
   `);
