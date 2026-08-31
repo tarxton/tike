@@ -36,6 +36,13 @@ const PARSE_FAILURE_THRESHOLD = 0.05;
 /** Below this many pages the ratio is meaningless, so the breaker stays out of the way. */
 const MIN_PAGES_FOR_THRESHOLD = 20;
 
+/**
+ * How many consecutive successful runs an offer may go unseen before it is treated as
+ * gone. Three rather than one because a single crawl can miss a page for reasons that
+ * say nothing about stock — a timeout, a shop's own sitemap hiccup, a transient 500.
+ */
+const STALE_AFTER_RUNS = 3;
+
 const args = process.argv.slice(2);
 const shopSlug = args.find((a) => !a.startsWith('--'));
 const limitArg = args.find((a) => a.startsWith('--limit='));
@@ -93,6 +100,37 @@ async function discoverFromCategories(
   }
 
   return [...found];
+}
+
+/**
+ * Mark offers the shop has stopped listing as out of stock.
+ *
+ * They are never deleted: the URL may still resolve, the price history is worth keeping,
+ * and a returning product should come back as the same row rather than a new one. But an
+ * offer that has survived three successful crawls without being seen is not something a
+ * shopper can buy, and leaving it in stock is a lie the site tells with a straight face.
+ *
+ * The cutoff is the start of the third-most-recent successful run. Before three runs
+ * exist that subquery is NULL and nothing is retired, which is the safe direction: a new
+ * shop cannot have its catalogue emptied by its own first crawl.
+ */
+async function retireUnseenOffers(
+  db: Parameters<Parameters<typeof withDb>[0]>[0],
+  shopId: number,
+): Promise<number> {
+  const result = await db.execute(sql`
+    update offer o
+    set in_stock = false
+    where o.shop_id = ${shopId}
+      and o.in_stock
+      and o.last_seen_at < (
+        select r.started_at from crawl_run r
+        where r.shop_id = ${shopId} and r.status = 'ok'
+        order by r.id desc
+        offset ${STALE_AFTER_RUNS - 1} limit 1
+      )
+  `);
+  return result.rowCount ?? 0;
 }
 
 await withDb(async (db) => {
@@ -269,5 +307,21 @@ await withDb(async (db) => {
     console.error('circuit breaker tripped: too many parse failures');
     for (const f of failures.slice(0, 5)) console.error(`  ${f.url}: ${f.reason}`);
     process.exitCode = 1;
+    // A tripped run proves nothing about what the shop still sells, so it must not be
+    // allowed to retire anything.
+    return;
   }
+
+  // Only a full pass can conclude anything about what a shop no longer sells. A limited
+  // or dry run visits a slice of the catalogue at most, so retiring after one would mark
+  // everything it did not happen to reach as out of stock — a 40-page smoke test would
+  // empty the shop.
+  if (dryRun || Number.isFinite(limit)) {
+    console.log('partial run: skipping staleness retirement');
+    return;
+  }
+
+  const retired = await retireUnseenOffers(db, row.id);
+  if (retired > 0)
+    console.log(`retired ${retired} offers unseen by the last ${STALE_AFTER_RUNS} runs`);
 });

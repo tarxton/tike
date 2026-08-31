@@ -1,0 +1,167 @@
+name: Crawl
+
+# The free-tier worker. Everything tike shows is a claim about what a shop sells right
+# now, so the schedule is the product, not a chore: a stale price is worse than no price.
+#
+# One full pass per shop per day. There is no incremental crawl yet — every run refetches
+# a shop's whole catalogue — and refetching thousands of pages from someone else's server
+# more often than that is not defensible for prices that move on daily cycles.
+
+on:
+  schedule:
+    # 03:10 UTC — off the hour, because everything else in the world runs on it.
+    - cron: '10 3 * * *'
+  workflow_dispatch:
+    inputs:
+      shop:
+        description: 'Single shop slug to crawl. Blank crawls every active shop.'
+        required: false
+        type: string
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  # The matrix comes from the database, so onboarding a shop stays a row in seed.ts
+  # rather than a row in seed.ts *and* a line in this file.
+  shops:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      slugs: ${{ steps.list.outputs.slugs }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - id: list
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: |
+          if [ -n "${{ inputs.shop }}" ]; then
+            slugs='["${{ inputs.shop }}"]'
+          else
+            slugs=$(pnpm --silent --filter @tike/jobs list-shops)
+          fi
+          echo "slugs=$slugs" >> "$GITHUB_OUTPUT"
+          echo "crawling: $slugs"
+
+  crawl:
+    needs: shops
+    runs-on: ubuntu-latest
+    # Sport Vision is ~4,400 pages at 1.2s spacing, so about 90 minutes. The ceiling is
+    # generous on purpose: a crawl that is cut off mid-run writes a partial catalogue.
+    timeout-minutes: 180
+    strategy:
+      # One shop's markup breaking says nothing about the others, and stopping their
+      # crawls would turn one adapter bug into a site-wide outage.
+      fail-fast: false
+      matrix:
+        shop: ${{ fromJSON(needs.shops.outputs.slugs) }}
+    concurrency:
+      # Never two runs against one shop at once — that would double the request rate we
+      # promised them, and race the offer upserts.
+      group: crawl-${{ matrix.shop }}
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Crawl ${{ matrix.shop }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          # Identifies us to every shop, with somewhere to complain to.
+          CRAWLER_USER_AGENT: 'tike-bot/0.1 (+https://github.com/tarxton/tike)'
+        run: pnpm --filter @tike/jobs crawl:ci ${{ matrix.shop }} 2>&1 | tee crawl-${{ matrix.shop }}.log
+
+      - name: Keep the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crawl-${{ matrix.shop }}
+          path: crawl-${{ matrix.shop }}.log
+          retention-days: 14
+
+      # A tripped breaker means the shop's markup moved under us. It exits non-zero, so
+      # this only runs when something actually needs a human.
+      - name: Report a broken crawl
+        if: failure()
+        uses: actions/github-script@v7
+        env:
+          SHOP: ${{ matrix.shop }}
+        with:
+          script: |
+            const shop = process.env.SHOP;
+            const title = `Crawl failing: ${shop}`;
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'crawl',
+            });
+            const body = [
+              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              'The parse-failure breaker aborted the run, or the job errored. Nothing was',
+              'written, so the catalogue is stale rather than wrong.',
+              '',
+              'The log is attached to the run as an artifact.',
+            ].join('\n');
+
+            // One issue per shop, updated rather than duplicated: a shop broken for a
+            // week should not open seven identical issues.
+            const existing = open.find((i) => i.title === title);
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                labels: ['crawl'],
+                body,
+              });
+            }
+
+  # Matching runs once, after every shop has finished. Running it per shop would compare
+  # a fresh catalogue against three stale ones and thrash the product rows.
+  match:
+    needs: crawl
+    # `always()` so one broken shop does not stop the others' offers being grouped.
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: match
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Match offers into products
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: pnpm --filter @tike/jobs match:ci

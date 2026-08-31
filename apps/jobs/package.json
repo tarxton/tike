@@ -7,7 +7,10 @@
     "crawl": "tsx --env-file=../../.env.local src/crawl.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "match": "tsx --env-file=../../.env.local src/match.ts"
+    "match": "tsx --env-file=../../.env.local src/match.ts",
+    "list-shops": "tsx src/list-shops.ts",
+    "crawl:ci": "tsx src/crawl.ts",
+    "match:ci": "tsx src/match.ts"
   },
   "dependencies": {
     "@tike/contracts": "workspace:*",
