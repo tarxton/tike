@@ -212,11 +212,22 @@ export const offerSize = pgTable(
     sizeUs: numeric('size_us', { precision: 4, scale: 1, mode: 'number' }),
     sizeUk: numeric('size_uk', { precision: 4, scale: 1, mode: 'number' }),
     inStock: boolean('in_stock').notNull().default(false),
+    /**
+     * The barcode for this exact shoe in this exact size, when the shop publishes one.
+     *
+     * A GTIN-13 is issued per product *and* size, so two shops quoting the same code are
+     * selling the identical thing — stronger evidence than any style code or title, and
+     * what matching tier 1 runs on. NBSHOP exposes it per size; Office Shoes gives one
+     * per product, which is why this lives on the size rather than the offer.
+     */
+    gtin: text('gtin'),
   },
   (t) => [
     uniqueIndex('offer_size_offer_size_key').on(t.offerId, t.sizeEu),
     // The core query: "who has EU 44 in stock right now?"
     index('offer_size_size_stock_idx').on(t.sizeEu, t.inStock),
+    // Matching looks shoes up by barcode across shops.
+    index('offer_size_gtin_idx').on(t.gtin),
   ],
 );
 

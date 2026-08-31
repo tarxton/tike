@@ -16,7 +16,7 @@ const candidate = (over: Partial<MatchCandidate> = {}): MatchCandidate => ({
   brand: 'Nike',
   model: 'DUNK LOW RETRO',
   sku: 'IM4414-200',
-  gtin: null,
+  gtins: [],
   gender: 'men',
   sizesEu: [41, 42, 43, 44, 45],
   ...over,
@@ -89,9 +89,29 @@ describe('similarity', () => {
 
 describe('matchOffers', () => {
   it('matches on a shared barcode regardless of title', () => {
-    const a = candidate({ gtin: '198959700963', model: 'DUNK LOW' });
-    const b = candidate({ offerId: 2, gtin: '198959700963', model: 'completely different' });
+    // Barcodes are per size, so the sets overlap rather than being equal: shops stock
+    // different size runs of the same shoe.
+    const a = candidate({ gtins: ['198959700963', '198959700970'], model: 'DUNK LOW' });
+    const b = candidate({
+      offerId: 2,
+      gtins: ['198959700970', '198959700987'],
+      model: 'completely different',
+    });
     expect(matchOffers(a, b)).toEqual({ method: 'gtin', confidence: 1 });
+  });
+
+  it('does not match two listings that share no barcode', () => {
+    const a = candidate({ offerId: 1, shopId: 1, gtins: ['111'], sku: null, model: 'A' });
+    const b = candidate({ offerId: 2, shopId: 2, gtins: ['222'], sku: null, model: 'B' });
+    expect(matchOffers(a, b)).toBeNull();
+  });
+
+  it('lets a barcode outrank a style-code disagreement', () => {
+    // Shops sometimes write their own SKU into the style-code field. A shared barcode is
+    // the manufacturer speaking, so it wins.
+    const a = candidate({ offerId: 1, shopId: 1, gtins: ['555'], sku: 'HOUSE-001' });
+    const b = candidate({ offerId: 2, shopId: 2, gtins: ['555'], sku: 'OTHER-999' });
+    expect(matchOffers(a, b)?.method).toBe('gtin');
   });
 
   it('matches on the manufacturer style code', () => {

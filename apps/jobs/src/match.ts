@@ -113,7 +113,14 @@ await withDb(async (db) => {
              coalesce(
                (select json_agg(s.size_eu) from offer_size s where s.offer_id = o.id),
                '[]'::json
-             ) as sizes
+             ) as sizes,
+             -- Barcodes drive matching tier 1. They live per size, so an offer carries a
+             -- set; two offers sharing any one of them are the same shoe.
+             coalesce(
+               (select json_agg(distinct s.gtin) from offer_size s
+                where s.offer_id = o.id and s.gtin is not null),
+               '[]'::json
+             ) as gtins
       from offer o
       join shop sh on sh.id = o.shop_id
       where sh.active
@@ -132,7 +139,7 @@ await withDb(async (db) => {
       brand: rawBrand,
       model: cleanModel(title, rawBrand),
       sku: r.sku === null ? null : String(r.sku),
-      gtin: null,
+      gtins: Array.isArray(r.gtins) ? r.gtins.map(String) : [],
       gender: r.gender === null ? null : String(r.gender),
       sizesEu: Array.isArray(r.sizes) ? r.sizes.map(Number) : [],
       imageUrl: r.image_url === null ? null : String(r.image_url),

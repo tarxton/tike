@@ -207,6 +207,9 @@ await withDb(async (db) => {
             sizeUs: s.sizeUs,
             sizeUk: s.sizeUk,
             inStock: s.inStock,
+            // Adapters have always extracted these; the write dropped them, which left
+            // matching tier 1 with nothing to compare and silently unreachable.
+            gtin: s.gtin,
           })),
         );
 

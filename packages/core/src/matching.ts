@@ -18,7 +18,14 @@ export interface MatchCandidate {
   /** Model with brand and category noise already stripped. */
   model: string;
   sku: string | null;
-  gtin?: string | null;
+  /**
+   * Every barcode the shop publishes for this listing, one per size.
+   *
+   * A GTIN-13 identifies a product *and* a size, so two listings quoting one in common
+   * are the same shoe — no title, brand or style code needed. A set rather than a scalar
+   * because that is how shops publish them: NBSHOP puts one on each size row.
+   */
+  gtins?: string[];
   gender: string | null;
   /** In-stock and out-of-stock EU sizes; used to tell adult from children's shoes. */
   sizesEu: number[];
@@ -27,6 +34,19 @@ export interface MatchCandidate {
 export interface MatchResult {
   method: MatchMethod;
   confidence: number;
+}
+
+/**
+ * True when two listings publish at least one barcode in common.
+ *
+ * One shared code is enough: a GTIN is assigned by the manufacturer rather than the shop,
+ * so two different shoes do not collide on one. Requiring the sets to match would instead
+ * reject real pairs, because shops stock different size runs of the same shoe.
+ */
+export function sharesGtin(a: string[] | undefined, b: string[] | undefined): boolean {
+  if (!a?.length || !b?.length) return false;
+  const set = new Set(a.filter(Boolean));
+  return b.some((g) => g && set.has(g));
 }
 
 /** Above this, a fuzzy pair is accepted automatically. Below, it goes to review. */
@@ -117,7 +137,7 @@ export function matchOffers(a: MatchCandidate, b: MatchCandidate): MatchResult |
   if (a.offerId === b.offerId) return null;
 
   // Tier 1: a shared barcode is conclusive regardless of how the titles read.
-  if (a.gtin && b.gtin && a.gtin === b.gtin) {
+  if (sharesGtin(a.gtins, b.gtins)) {
     return { method: 'gtin', confidence: 1 };
   }
 
