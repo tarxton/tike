@@ -110,8 +110,14 @@ await withDb(async (db) => {
   const rows = (
     await db.execute(sql`
       select o.id, o.shop_id, o.title, o.raw_brand, o.sku, o.image_url, o.gender::text as gender,
+             -- In-stock sizes only. NBSHOP renders a shop's whole size scale and disables
+             -- what it cannot sell, so one women's Puma lists EU 16 to 51 with four sizes
+             -- actually available. Fed to the guards, that range overlaps everything —
+             -- it stops separating kids' shoes from adults', and then the span check
+             -- throws the cluster away. What a shop can sell today is the honest signal.
              coalesce(
-               (select json_agg(s.size_eu) from offer_size s where s.offer_id = o.id),
+               (select json_agg(s.size_eu) from offer_size s
+                where s.offer_id = o.id and s.in_stock),
                '[]'::json
              ) as sizes,
              -- Barcodes drive matching tier 1. They live per size, so an offer carries a
