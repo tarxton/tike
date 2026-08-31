@@ -21,6 +21,12 @@ on:
 env:
   TURBO_TELEMETRY_DISABLED: 1
 
+# Read-only by default. The crawl job asks for `issues: write` on its own, because the
+# whole point of the breaker is that a broken adapter reaches a human — and the workflow
+# token is read-only unless it says otherwise, so the reporting step 403s in silence.
+permissions:
+  contents: read
+
 jobs:
   # The matrix comes from the database, so onboarding a shop stays a row in seed.ts
   # rather than a row in seed.ts *and* a line in this file.
@@ -68,6 +74,10 @@ jobs:
       # promised them, and race the offer upserts.
       group: crawl-${{ matrix.shop }}
       cancel-in-progress: false
+    permissions:
+      contents: read
+      # Only this job files issues, and only this job needs the scope.
+      issues: write
 
     steps:
       - uses: actions/checkout@v5
