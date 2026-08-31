@@ -46,7 +46,7 @@ jobs:
           if [ -n "${{ inputs.shop }}" ]; then
             slugs='["${{ inputs.shop }}"]'
           else
-            slugs=$(pnpm --silent --filter @tike/jobs list-shops)
+            slugs=$(pnpm --silent --filter @tike/jobs list-shops:ci)
           fi
           echo "slugs=$slugs" >> "$GITHUB_OUTPUT"
           echo "crawling: $slugs"
