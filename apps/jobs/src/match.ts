@@ -12,7 +12,7 @@
  * duplicate is untidy, a wrong merge is a lie about what a shop sells.
  */
 
-import { eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import {
   cleanModel,
   isAutoMergeable,
@@ -27,6 +27,21 @@ import {
 import { brand as brandTable, offer, product, withDb } from '@tike/db';
 
 const dryRun = process.argv.includes('--dry-run');
+
+/**
+ * Rows per write statement.
+ *
+ * Postgres caps a statement at 65535 bound parameters, and a product row carries seven.
+ * A thousand leaves a wide margin while still collapsing thousands of round trips into a
+ * handful.
+ */
+const WRITE_CHUNK = 1000;
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
 
 interface Row extends MatchCandidate {
   title: string;
@@ -251,79 +266,107 @@ await withDb(async (db) => {
     return;
   }
 
-  // Matching derives its answer from the current catalogue rather than accumulating it,
-  // so a run has to be able to reach a *different* answer than the last one. Without
-  // clearing first, a corrected matcher leaves the previous run's wrong groups sitting
-  // in the database and the correction appears to have done nothing.
+  // The whole rebuild is one transaction.
   //
-  // Products carrying a reviewed decision in product_alias are kept: those encode a
-  // human judgement, which this job has no business discarding.
-  const cleared = await db.transaction(async (tx) => {
+  // Matching derives its answer from the current catalogue rather than accumulating it,
+  // so a run has to be able to reach a *different* answer than the last one — which means
+  // clearing first. Clearing outside a transaction was the dangerous half of that: a
+  // failure between the clear and the writes left the site with no products at all and no
+  // way back. Now it either all lands or none of it does.
+  //
+  // Products carrying a reviewed decision in product_alias are kept: those encode a human
+  // judgement, which this job has no business discarding.
+  const written = await db.transaction(async (tx) => {
     await tx
       .update(offer)
       .set({ productId: null, matchMethod: null, matchConfidence: null })
       .where(sql`product_id is not null`);
+
     const removed = await tx
       .delete(product)
       .where(sql`not exists (select 1 from product_alias a where a.product_id = product.id)`)
       .returning({ id: product.id });
-    return removed.length;
-  });
-  console.log(`cleared ${cleared} previously derived products`);
 
-  // Brands are created lazily so product rows can reference them.
-  const brandIds = new Map<string, number>();
-  for (const name of new Set(candidates.map((c) => c.brand).filter(Boolean) as string[])) {
-    const slug = slugify(name);
-    const [row] = await db
-      .insert(brandTable)
-      .values({ slug, name })
-      .onConflictDoUpdate({ target: brandTable.slug, set: { name } })
-      .returning({ id: brandTable.id });
-    brandIds.set(normalizeForSearch(name), row!.id);
-  }
-
-  let created = 0;
-  for (const ids of clusters) {
-    const members = ids
-      .map((id) => candidates.find((c) => c.offerId === id)!)
-      .sort((x, y) => x.model.length - y.model.length);
-    const lead = members[0]!;
-
-    // The shortest model name is usually the cleanest: shops append their own
-    // qualifiers ("- BUBBLE LOVE", "(GS)") to the same underlying shoe.
-    const model = lead.model;
-    const slugBase = slugify([lead.brand, model].filter(Boolean).join(' '));
-
-    await db.transaction(async (tx) => {
-      const [created_] = await tx
-        .insert(product)
-        .values({
-          brandId: lead.brand ? (brandIds.get(normalizeForSearch(lead.brand)) ?? null) : null,
-          slug: `${slugBase}-${lead.offerId}`,
-          model,
-          styleCode: lead.sku,
-          gender: (lead.gender as 'men' | 'women' | 'unisex' | 'kids' | null) ?? null,
-          heroImageUrl: lead.imageUrl,
-          searchDoc: normalizeForSearch([lead.brand, model, lead.sku].filter(Boolean).join(' ')),
-        })
-        .onConflictDoUpdate({ target: product.slug, set: { model } })
-        .returning({ id: product.id });
-
-      const productId = created_!.id;
-      for (const member of members) {
-        await tx
-          .update(offer)
-          .set({
-            productId,
-            matchMethod: methodOf.get(member.offerId) ?? 'fuzzy',
-            matchConfidence: 1,
-          })
-          .where(eq(offer.id, member.offerId));
+    // Brands in one statement rather than one per brand.
+    const brandNames = [...new Set(candidates.map((c) => c.brand).filter(Boolean) as string[])];
+    const brandIds = new Map<string, number>();
+    if (brandNames.length > 0) {
+      const saved = await tx
+        .insert(brandTable)
+        .values(brandNames.map((name) => ({ slug: slugify(name), name })))
+        .onConflictDoUpdate({ target: brandTable.slug, set: { name: sql`excluded.name` } })
+        .returning({ id: brandTable.id, slug: brandTable.slug });
+      const bySlug = new Map(saved.map((r) => [r.slug, r.id]));
+      for (const name of brandNames) {
+        const id = bySlug.get(slugify(name));
+        if (id !== undefined) brandIds.set(normalizeForSearch(name), id);
       }
-    });
-    created += 1;
-  }
+    }
 
-  console.log(`\nwrote ${created} products`);
+    const planned = clusters.map((ids) => {
+      // The shortest model name is usually the cleanest: shops append their own
+      // qualifiers ("- BUBBLE LOVE", "(GS)") to the same underlying shoe.
+      const members = ids
+        .map((id) => byId.get(id)!)
+        .sort((x, y) => x.model.length - y.model.length);
+      const lead = members[0]!;
+      const slug = `${slugify([lead.brand, lead.model].filter(Boolean).join(' '))}-${lead.offerId}`;
+      return { members, lead, slug };
+    });
+
+    const savedProducts: { id: number; slug: string }[] = [];
+    for (const batch of chunks(planned, WRITE_CHUNK)) {
+      const rows = await tx
+        .insert(product)
+        .values(
+          batch.map(({ lead, slug }) => ({
+            brandId: lead.brand ? (brandIds.get(normalizeForSearch(lead.brand)) ?? null) : null,
+            slug,
+            model: lead.model,
+            styleCode: lead.sku,
+            gender: (lead.gender as 'men' | 'women' | 'unisex' | 'kids' | null) ?? null,
+            heroImageUrl: lead.imageUrl,
+            searchDoc: normalizeForSearch(
+              [lead.brand, lead.model, lead.sku].filter(Boolean).join(' '),
+            ),
+          })),
+        )
+        .onConflictDoUpdate({ target: product.slug, set: { model: sql`excluded.model` } })
+        .returning({ id: product.id, slug: product.slug });
+      savedProducts.push(...rows);
+    }
+    const idBySlug = new Map(savedProducts.map((r) => [r.slug, r.id]));
+
+    // Every offer's assignment in one statement per chunk rather than one per offer.
+    // This is where the eleven minutes went: a transaction per product meant roughly four
+    // thousand round trips, which costs two minutes from a laptop beside the database and
+    // eleven from a runner in another region. The work never changed, only the trips.
+    const assignments = planned.flatMap(({ members, slug }) => {
+      const productId = idBySlug.get(slug);
+      if (productId === undefined) return [];
+      return members.map((m) => ({
+        offerId: m.offerId,
+        productId,
+        method: methodOf.get(m.offerId) ?? 'fuzzy',
+      }));
+    });
+
+    for (const batch of chunks(assignments, WRITE_CHUNK)) {
+      const values = sql.join(
+        batch.map((a) => sql`(${a.offerId}::int, ${a.productId}::int, ${a.method}::match_method)`),
+        sql`, `,
+      );
+      await tx.execute(sql`
+        update offer o
+        set product_id = v.product_id, match_method = v.method, match_confidence = 1
+        from (values ${values}) as v(offer_id, product_id, method)
+        where o.id = v.offer_id
+      `);
+    }
+
+    return { cleared: removed.length, products: savedProducts.length, offers: assignments.length };
+  });
+
+  console.log(`cleared ${written.cleared} previously derived products`);
+  console.log(`wrote ${written.products} products over ${written.offers} offers`);
 });

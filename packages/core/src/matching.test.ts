@@ -213,6 +213,21 @@ describe('matchOffers and conflicting style codes', () => {
     expect(matchOffers(a, b)?.method).toBe('fuzzy');
   });
 
+  it('rejects a pair whose codes are too short to match on but still disagree', () => {
+    // Buzz's Reebok Classic Leather is 2232 and Sport Vision's is 28413. Neither is long
+    // enough to prove sameness, but the pair is plainly not one shoe, and the titles are
+    // identical so fuzzy would otherwise merge two colourways.
+    const a = candidate({ offerId: 1, shopId: 1, model: 'Classic Leather', sku: '2232' });
+    const b = candidate({ offerId: 2, shopId: 2, model: 'Classic Leather', sku: '28413' });
+    expect(matchOffers(a, b)).toBeNull();
+  });
+
+  it('still matches on the title when a short code is the same on both sides', () => {
+    const a = candidate({ offerId: 1, shopId: 1, model: 'Classic Leather', sku: '2232' });
+    const b = candidate({ offerId: 2, shopId: 2, model: 'Classic Leather', sku: '2232' });
+    expect(matchOffers(a, b)?.method).toBe('fuzzy');
+  });
+
   it('leaves the code tiers alone: an identical code still matches outright', () => {
     const a = candidate({ offerId: 1, shopId: 1, model: 'Cortez', sku: 'IB1857-203' });
     const b = candidate({ offerId: 2, shopId: 2, model: 'Something Else', sku: 'IB1857-203' });

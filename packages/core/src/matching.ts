@@ -67,6 +67,24 @@ export function normalizeStyleCode(sku: string | null): string | null {
 }
 
 /**
+ * A style code reduced for *comparison only*, with no minimum length.
+ *
+ * `normalizeStyleCode` refuses anything under five characters, because a short code is
+ * too collision-prone to prove two listings are the same shoe. But it is plenty to prove
+ * they are not: Buzz's Reebok "Classic Leather" carries 2232 and Sport Vision's carries
+ * 28413, and with both rejected as unparseable the identical titles merged two different
+ * colourways — exactly what treating colour as part of identity is meant to prevent.
+ *
+ * Asymmetric on purpose. Weak evidence of sameness is worthless; weak evidence of
+ * difference is still evidence.
+ */
+export function comparableStyleCode(sku: string | null): string | null {
+  if (!sku) return null;
+  const cleaned = sku.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return cleaned === '' ? null : cleaned;
+}
+
+/**
  * Children's shoes share model names with adult ones — adidas sells "Campus 00s" and
  * "Campus 00s C", and their titles are 0.69 similar. Merging them would put a toddler
  * shoe in front of someone filtering size 44.
@@ -165,7 +183,9 @@ export function matchOffers(a: MatchCandidate, b: MatchCandidate): MatchResult |
   // too: that is one model in two colours, and a card claiming two shops carry it would
   // send a shopper after the red pair to a shop stocking the blue one. Colour is part of
   // what a shoe is, so it is part of what a product is.
-  if (codeA && codeB) return null;
+  const comparableA = comparableStyleCode(a.sku);
+  const comparableB = comparableStyleCode(b.sku);
+  if (comparableA && comparableB && comparableA !== comparableB) return null;
 
   if (!a.brand || !b.brand) return null;
   if (normalizeForSearch(a.brand) !== normalizeForSearch(b.brand)) return null;
