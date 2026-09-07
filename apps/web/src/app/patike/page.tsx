@@ -111,7 +111,9 @@ export default async function Results({
       ) : null}
 
       {results.total > 0 ? (
-        <div className="mb-6 flex justify-end">
+        // Ruled off from the filter block above it: the search box and the size chips
+        // compose a query, this changes how the answer is arranged. Different jobs.
+        <div className="mt-5 mb-6 flex justify-start border-t border-neutral-200 pt-4">
           <SortSelect
             sort={sort}
             query={query}
