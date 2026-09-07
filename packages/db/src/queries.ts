@@ -280,8 +280,14 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
     limit = 48,
     offset = 0,
   } = params;
-  // An explicitly chosen children's size is a deliberate request for them.
-  const wantsKids = includeKids || (sizesEu ?? []).some((s) => s < ADULT_MIN_SIZE);
+  // An explicitly chosen children's size is a deliberate request for them, and so is
+  // filtering to children's shoes — without this the gender filter subtracted 861 of the
+  // kids products it was asked to show, because the default still excluded anything whose
+  // whole size run is under EU 36.
+  const wantsKids =
+    includeKids ||
+    (sizesEu ?? []).some((s) => s < ADULT_MIN_SIZE) ||
+    (genders ?? []).includes('kids');
 
   const rows = await db().execute(sql`
     -- Filter at the offer level first: a size or brand filter is a statement about a
@@ -465,7 +471,10 @@ export async function availableBrands(
   } = {},
 ): Promise<{ brand: string; count: number }[]> {
   const { sizesEu, query, includeKids, onSale, shops, genders } = params;
-  const wantsKids = includeKids || (sizesEu ?? []).some((s) => s < ADULT_MIN_SIZE);
+  const wantsKids =
+    includeKids ||
+    (sizesEu ?? []).some((s) => s < ADULT_MIN_SIZE) ||
+    (genders ?? []).includes('kids');
   const rows = await db().execute(sql`
     -- Counts groups, not offers, so a facet count matches the result count the header
     -- shows after the same click. Counting rows here would say "Nike 73" and then land
