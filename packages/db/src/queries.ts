@@ -59,6 +59,27 @@ export interface SearchPage {
   total: number;
 }
 
+/**
+ * How results are ordered. The URL carries these verbatim, so they are in BCS.
+ *
+ * `undefined` means "decide from context": relevance when there is a query to be relevant
+ * to, newest when browsing. A flat default cannot serve both — making newest unconditional
+ * would sort a search for "cortez" by discovery date and bury the shoe that was asked for.
+ */
+export type SortKey = 'najnovije' | 'najjeftinije' | 'najskuplje' | 'snizenje' | 'abecedno';
+
+export const SORT_KEYS: SortKey[] = [
+  'najnovije',
+  'najjeftinije',
+  'najskuplje',
+  'snizenje',
+  'abecedno',
+];
+
+export function isSortKey(value: string | undefined): value is SortKey {
+  return value !== undefined && (SORT_KEYS as string[]).includes(value);
+}
+
 export interface SearchParams {
   /**
    * Hard filter: only listings a shop can sell today in at least one of these EU sizes.
@@ -77,6 +98,7 @@ export interface SearchParams {
    * before an adult sees a single relevant result.
    */
   includeKids?: boolean;
+  sort?: SortKey;
   limit?: number;
   offset?: number;
 }
@@ -148,10 +170,27 @@ const scoredTitle = sql`btrim(replace(' ' || regexp_replace(unaccent(lower(b.tit
  * Equal on both, the result covering more shops wins. That is the whole point of the
  * site, and it costs the shopper nothing when the prices are identical anyway.
  */
-function resultOrder(query: string | undefined) {
+function resultOrder(query: string | undefined, sort: SortKey | undefined) {
   const trimmed = query?.trim();
+  // Cheapest, then most shops, then a stable key — every sort ends with this so that
+  // pagination never reorders rows it has already shown.
   const tail = sql`g.min_price asc, g.shop_count desc, g.group_key asc`;
-  if (!trimmed) return sql`order by ${tail}`;
+
+  if (sort === 'najjeftinije') return sql`order by ${tail}`;
+  if (sort === 'najskuplje') return sql`order by g.min_price desc, g.group_key asc`;
+  if (sort === 'abecedno') {
+    // Collated so that Č and Ć sort where a BCS reader expects, not after Z.
+    return sql`order by unaccent(lower(b.title)) asc, ${tail}`;
+  }
+  if (sort === 'snizenje') {
+    // Only 3.7% of the catalogue is discounted, so everything else ties at zero and the
+    // tail decides — which is why the tail is cheapest-first rather than arbitrary.
+    return sql`order by g.best_discount desc, ${tail}`;
+  }
+  if (sort === 'najnovije') return sql`order by g.first_seen desc, ${tail}`;
+
+  // No explicit choice: be relevant when there is something to be relevant to.
+  if (!trimmed) return sql`order by g.first_seen desc, ${tail}`;
   return sql`order by
       round(similarity(${scoredTitle}, regexp_replace(unaccent(lower(${trimmed})), '[^a-z0-9 ]', '', 'g'))::numeric, 1) desc,
       ${tail}`;
@@ -178,7 +217,7 @@ function sizeFilter(sizesEu: number[] | undefined) {
  * normalized column with the trigram index that migration 0001 already prepares.
  */
 export async function searchOffers(params: SearchParams = {}): Promise<SearchPage> {
-  const { sizesEu, brand, query, includeKids, limit = 48, offset = 0 } = params;
+  const { sizesEu, brand, query, includeKids, sort, limit = 48, offset = 0 } = params;
   // An explicitly chosen children's size is a deliberate request for them.
   const wantsKids = includeKids || (sizesEu ?? []).some((s) => s < ADULT_MIN_SIZE);
 
@@ -189,7 +228,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
     with candidate as (
       select
         o.id, o.shop_id, o.product_id, o.title, o.raw_brand, o.url, o.image_url,
-        o.price_minor, o.original_price_minor, o.currency,
+        o.price_minor, o.original_price_minor, o.currency, o.first_seen_at,
         s.slug as shop_slug, s.name as shop_name, s.logo_url as shop_logo,
         -- Matched offers collapse onto their product; unmatched ones stay their own
         -- group, so nothing disappears from the results while coverage is partial.
@@ -211,6 +250,16 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
         -- what the second one charges, or the number is just decoration.
         max(price_minor) as max_price,
         count(distinct shop_id)::int as shop_count,
+        -- When tike first saw this shoe anywhere, not when a shop last restocked it.
+        min(first_seen_at) as first_seen,
+        -- The best saving any shop is offering on it, as a fraction.
+        max(
+          case
+            when original_price_minor > price_minor
+              then (original_price_minor - price_minor)::numeric / original_price_minor
+            else 0
+          end
+        ) as best_discount,
         -- The cheapest offer represents the group: it supplies the image, title and
         -- the link, so "od 215 KM" and the click-out always agree.
         (array_agg(id order by price_minor asc, id asc))[1] as best_offer_id
@@ -272,7 +321,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
     join shop s on s.id = b.shop_id
     -- Only matched results have a product page to link to.
     left join product pr on pr.id = b.product_id
-    ${resultOrder(query)}
+    ${resultOrder(query, sort)}
     limit ${limit} offset ${offset}
   `);
 

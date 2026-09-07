@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { availableBrands, availableSizes, searchOffers } from '@tike/db';
+import { availableBrands, availableSizes, isSortKey, searchOffers } from '@tike/db';
 import { Filters } from '@/components/filters';
 import { OfferCard } from '@/components/offer-card';
 import { Pager } from '@/components/pager';
+import { SortSelect } from '@/components/sort-select';
 import { formatCount, formatSize, pluralResults, showingRange, t } from '@/lib/messages';
 import { getSizes } from '@/lib/size';
 import { parseSizes } from '@/lib/sizes';
@@ -38,6 +39,8 @@ export default async function Results({
   const query = first('q');
   const showKids = first('djecije') === '1';
   const page = parsePage(first('strana'));
+  const sortParam = first('sort');
+  const sort = isSortKey(sortParam) ? sortParam : undefined;
 
   const [results, sizes, brands] = await Promise.all([
     searchOffers({
@@ -45,6 +48,7 @@ export default async function Results({
       brand,
       query,
       includeKids: showKids,
+      sort,
       limit: PAGE_SIZE,
       offset: (page - 1) * PAGE_SIZE,
     }),
@@ -87,7 +91,7 @@ export default async function Results({
           sizes={sizes}
           selected={selected}
           showKids={showKids}
-          kidsHref={buildHref({ sizes: selected, brand, query, kids: !showKids })}
+          kidsHref={buildHref({ sizes: selected, brand, query, kids: !showKids, sort })}
           query={query}
           brand={brand}
           compact
@@ -98,7 +102,7 @@ export default async function Results({
         <p className="mb-4 text-sm text-neutral-600">
           {t.resultsFor} <strong className="text-neutral-900">“{query}”</strong>{' '}
           <Link
-            href={buildHref({ sizes: selected, brand, kids: showKids })}
+            href={buildHref({ sizes: selected, brand, kids: showKids, sort })}
             className="ml-1 underline underline-offset-4 hover:text-neutral-900"
           >
             {t.clearSearch}
@@ -106,9 +110,21 @@ export default async function Results({
         </p>
       ) : null}
 
+      {results.total > 0 ? (
+        <div className="mb-6 flex justify-end">
+          <SortSelect
+            sort={sort}
+            query={query}
+            sizes={selected}
+            brand={brand}
+            showKids={showKids}
+          />
+        </div>
+      ) : null}
+
       <nav aria-label={t.brand} className="mb-8 flex flex-wrap gap-2 text-sm">
         <FilterChip
-          href={buildHref({ sizes: selected, brand: undefined, query, kids: showKids })}
+          href={buildHref({ sizes: selected, brand: undefined, query, kids: showKids, sort })}
           active={!brand}
         >
           {t.allBrands}
@@ -116,7 +132,7 @@ export default async function Results({
         {brands.slice(0, 12).map((b) => (
           <FilterChip
             key={b.brand}
-            href={buildHref({ sizes: selected, brand: b.brand, query, kids: showKids })}
+            href={buildHref({ sizes: selected, brand: b.brand, query, kids: showKids, sort })}
             active={brand?.toLowerCase() === b.brand.toLowerCase()}
           >
             {b.brand} <span className="text-neutral-400 tabular-nums">{b.count}</span>
@@ -128,7 +144,7 @@ export default async function Results({
         <div className="rounded-xl border border-dashed border-neutral-300 px-6 py-16 text-center">
           <p className="font-medium text-neutral-900">{t.emptyPage}</p>
           <Link
-            href={buildHref({ sizes: selected, brand, query, kids: showKids })}
+            href={buildHref({ sizes: selected, brand, query, kids: showKids, sort })}
             className="mt-4 inline-block text-sm underline underline-offset-4 hover:text-neutral-900"
           >
             {t.backToFirstPage}
@@ -165,7 +181,9 @@ export default async function Results({
           <Pager
             page={page}
             totalPages={totalPages}
-            hrefFor={(p) => buildHref({ sizes: selected, brand, query, kids: showKids, page: p })}
+            hrefFor={(p) =>
+              buildHref({ sizes: selected, brand, query, kids: showKids, sort, page: p })
+            }
           />
         </>
       ) : null}
@@ -193,12 +211,14 @@ function buildHref({
   query,
   kids,
   page,
+  sort,
 }: {
   sizes: number[];
   brand?: string;
   query?: string;
   kids?: boolean;
   page?: number;
+  sort?: string;
 }): string {
   const sp = new URLSearchParams();
   if (sizes.length > 0) sp.set('velicina', sizes.join(','));
@@ -207,6 +227,7 @@ function buildHref({
   if (kids) sp.set('djecije', '1');
   // Page one is the bare URL: a filter change should never land on page 7 of nothing.
   if (page && page > 1) sp.set('strana', String(page));
+  if (sort) sp.set('sort', sort);
   const qs = sp.toString();
   return qs ? `/patike?${qs}` : '/patike';
 }

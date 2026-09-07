@@ -24,6 +24,14 @@ export const t = {
   brand: 'Brend',
   allBrands: 'Svi brendovi',
 
+  sortBy: 'Sortiraj',
+  sortNewest: 'Najnovije',
+  sortCheapest: 'Najjeftinije',
+  sortDearest: 'Najskuplje',
+  sortDiscount: 'Najveće sniženje',
+  sortAlphabetical: 'Abecedno',
+  sortRelevance: 'Najbolje pogađa',
+
   results: 'rezultata',
   resultOne: 'rezultat',
   // Not "nema patika u tom broju" — the empty state also fires on a model query or a
