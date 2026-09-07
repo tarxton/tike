@@ -9,8 +9,15 @@ name: Crawl
 
 on:
   schedule:
-    # 03:10 UTC — off the hour, because everything else in the world runs on it.
-    - cron: '10 3 * * *'
+    # Asks for 22:40 UTC to *land* around 03:00.
+    #
+    # GitHub queues scheduled workflows on shared runners and the free tier waits its
+    # turn: every run since this schedule began has started 4.5 to 5 hours late, which
+    # put 90 minutes of crawl traffic through four BiH shops at 10am their time. Nothing
+    # is misconfigured — the delay is not ours to remove — so the request is moved early
+    # enough that the delay lands it before the shops open. If GitHub ever gets punctual
+    # this runs at half past midnight, which is just as considerate.
+    - cron: '40 22 * * *'
   workflow_dispatch:
     inputs:
       shop:
