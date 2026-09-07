@@ -4,7 +4,7 @@ import { availableBrands, availableShops, availableSizes, isSortKey, searchOffer
 import { Filters } from '@/components/filters';
 import { OfferCard } from '@/components/offer-card';
 import { Pager } from '@/components/pager';
-import { SortSelect } from '@/components/sort-select';
+import { SortMenu } from '@/components/sort-menu';
 import { FilterBar, GENDERS } from '@/components/filter-bar';
 import { formatCount, formatSize, pluralResults, showingRange, t } from '@/lib/messages';
 import { getSizes } from '@/lib/size';
@@ -168,15 +168,21 @@ export default async function Results({
         // Ruled off from the filter block above it: the search box and the size chips
         // compose a query, this changes how the answer is arranged. Different jobs.
         <div className="mt-5 mb-6 flex justify-start border-t border-neutral-200 pt-4">
-          <SortSelect
+          <SortMenu
             sort={sort}
             query={query}
-            sizes={selected}
-            brands={brands}
-            showKids={showKids}
-            onSale={onSale}
-            shops={shops}
-            genders={genders}
+            hrefFor={(next) =>
+              buildHref({
+                sizes: selected,
+                brands,
+                query,
+                kids: showKids,
+                sort: next,
+                onSale,
+                shops,
+                genders,
+              })
+            }
           />
         </div>
       ) : null}
