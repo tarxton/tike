@@ -28,12 +28,18 @@ export function SortSelect({
   sizes,
   brand,
   showKids,
+  onSale,
+  shops,
+  genders,
 }: {
   sort: SortKey | undefined;
   query?: string;
   sizes: number[];
   brand?: string;
   showKids: boolean;
+  onSale: boolean;
+  shops: string[];
+  genders: string[];
 }) {
   // Without a query the unset default *is* "najnovije", so offering both an empty option
   // and the named one listed the same order twice. Relevance has no key of its own, so it
@@ -46,6 +52,9 @@ export function SortSelect({
       {sizes.length > 0 ? <input type="hidden" name="velicina" value={sizes.join(',')} /> : null}
       {brand ? <input type="hidden" name="brend" value={brand} /> : null}
       {showKids ? <input type="hidden" name="djecije" value="1" /> : null}
+      {onSale ? <input type="hidden" name="akcija" value="1" /> : null}
+      {shops.length > 0 ? <input type="hidden" name="prodavnica" value={shops.join(',')} /> : null}
+      {genders.length > 0 ? <input type="hidden" name="pol" value={genders.join(',')} /> : null}
 
       <label htmlFor="sort" className="text-sm text-neutral-600">
         {t.sortBy}

@@ -98,6 +98,25 @@ export interface SearchParams {
    * before an adult sees a single relevant result.
    */
   includeKids?: boolean;
+  /**
+   * Only listings the shop is discounting.
+   *
+   * "Discounting" means the old price is genuinely higher, not merely present — shops
+   * repeat the current price in the old-price field often enough that trusting its
+   * presence would put the whole catalogue on sale.
+   */
+  onSale?: boolean;
+  /** Shop slugs to include. Empty means every shop. */
+  shops?: string[];
+  /**
+   * Genders to include, as extracted from each shop's own words.
+   *
+   * Around a third of the catalogue still says nothing about who a shoe is for, and
+   * those are included in every selection rather than hidden. Size ranges cannot fill
+   * the gap: measured against known labels, they put over half of children's shoes in
+   * women's, because junior 36-40 and women's 36-40 are the same numbers.
+   */
+  genders?: string[];
   sort?: SortKey;
   limit?: number;
   offset?: number;
@@ -196,6 +215,38 @@ function resultOrder(query: string | undefined, sort: SortKey | undefined) {
       ${tail}`;
 }
 
+/** Listings whose old price is genuinely higher than what they cost today. */
+function saleFilter(onSale: boolean | undefined) {
+  if (!onSale) return sql``;
+  return sql`and o.original_price_minor is not null and o.original_price_minor > o.price_minor`;
+}
+
+/** `s.slug in ('buzz', 'officeshoes')`, or nothing when no shop is chosen. */
+function shopFilter(shops: string[] | undefined) {
+  if (!shops || shops.length === 0) return sql``;
+  const list = sql.join(
+    shops.map((slug) => sql`${slug}`),
+    sql`, `,
+  );
+  return sql`and s.slug in (${list})`;
+}
+
+/**
+ * `o.gender in (...)`, and always the unlabelled ones too.
+ *
+ * Excluding nulls would quietly hide a third of the catalogue behind a filter that
+ * claims only to narrow by gender. A shopper who picks "muške" would rather see a few
+ * unlabelled shoes than silently lose two thousand.
+ */
+function genderFilter(genders: string[] | undefined) {
+  if (!genders || genders.length === 0) return sql``;
+  const list = sql.join(
+    genders.map((g) => sql`${g}`),
+    sql`, `,
+  );
+  return sql`and (o.gender is null or o.gender::text in (${list}))`;
+}
+
 /** `size_eu in (45, 46)`, or nothing when no sizes are selected. */
 function sizeFilter(sizesEu: number[] | undefined) {
   if (!sizesEu || sizesEu.length === 0) return sql``;
@@ -217,7 +268,18 @@ function sizeFilter(sizesEu: number[] | undefined) {
  * normalized column with the trigram index that migration 0001 already prepares.
  */
 export async function searchOffers(params: SearchParams = {}): Promise<SearchPage> {
-  const { sizesEu, brand, query, includeKids, sort, limit = 48, offset = 0 } = params;
+  const {
+    sizesEu,
+    brand,
+    query,
+    includeKids,
+    onSale,
+    shops,
+    genders,
+    sort,
+    limit = 48,
+    offset = 0,
+  } = params;
   // An explicitly chosen children's size is a deliberate request for them.
   const wantsKids = includeKids || (sizesEu ?? []).some((s) => s < ADULT_MIN_SIZE);
 
@@ -239,6 +301,9 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
         and o.in_stock
         ${sizeFilter(sizesEu)}
         ${kidsFilter(wantsKids)}
+        ${saleFilter(onSale)}
+        ${shopFilter(shops)}
+        ${genderFilter(genders)}
         ${brand === undefined ? sql`` : sql`and unaccent(lower(o.raw_brand)) = unaccent(lower(${brand}))`}
         ${titleFilter(query)}
     ),
@@ -390,9 +455,16 @@ export async function availableSizes(): Promise<number[]> {
  * that ignores the current filter promises results the click cannot deliver.
  */
 export async function availableBrands(
-  params: { sizesEu?: number[]; query?: string; includeKids?: boolean } = {},
+  params: {
+    sizesEu?: number[];
+    query?: string;
+    includeKids?: boolean;
+    onSale?: boolean;
+    shops?: string[];
+    genders?: string[];
+  } = {},
 ): Promise<{ brand: string; count: number }[]> {
-  const { sizesEu, query, includeKids } = params;
+  const { sizesEu, query, includeKids, onSale, shops, genders } = params;
   const wantsKids = includeKids || (sizesEu ?? []).some((s) => s < ADULT_MIN_SIZE);
   const rows = await db().execute(sql`
     -- Counts groups, not offers, so a facet count matches the result count the header
@@ -406,6 +478,9 @@ export async function availableBrands(
     where o.in_stock and s.active and o.raw_brand is not null
       ${sizeFilter(sizesEu)}
       ${kidsFilter(wantsKids)}
+      ${saleFilter(onSale)}
+      ${shopFilter(shops)}
+      ${genderFilter(genders)}
       ${titleFilter(query)}
     group by o.raw_brand
     order by 2 desc, o.raw_brand asc
@@ -530,4 +605,21 @@ export async function productBySlug(slug: string): Promise<ProductDetail | null>
     heroImageUrl: head.heroImageUrl === null ? null : String(head.heroImageUrl),
     offers,
   };
+}
+
+/** Shops with something in stock, for the shop filter. */
+export async function availableShops(): Promise<
+  { slug: string; name: string; logoUrl: string | null }[]
+> {
+  const rows = await db().execute(sql`
+    select s.slug as "slug", s.name as "name", s.logo_url as "logoUrl"
+    from shop s
+    where s.active and exists (select 1 from offer o where o.shop_id = s.id and o.in_stock)
+    order by s.name asc
+  `);
+  return (rows.rows as Record<string, unknown>[]).map((r) => ({
+    slug: String(r.slug),
+    name: String(r.name),
+    logoUrl: r.logoUrl === null ? null : String(r.logoUrl),
+  }));
 }

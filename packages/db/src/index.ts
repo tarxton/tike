@@ -5,6 +5,7 @@ export {
   searchOffers,
   availableSizes,
   availableBrands,
+  availableShops,
   productBySlug,
   isSortKey,
   SORT_KEYS,

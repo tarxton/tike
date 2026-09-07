@@ -24,6 +24,13 @@ export const t = {
   brand: 'Brend',
   allBrands: 'Svi brendovi',
 
+  onSale: 'Na sniženju',
+  genderMen: 'Muške',
+  genderWomen: 'Ženske',
+  genderKids: 'Dječije',
+  genderUnisex: 'Unisex',
+  genderNote: 'Proizvodi bez oznake pola ostaju prikazani.',
+
   sortBy: 'Sortiraj',
   sortNewest: 'Najnovije',
   sortCheapest: 'Najjeftinije',
