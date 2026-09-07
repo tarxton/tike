@@ -181,6 +181,10 @@ function ShopRow({
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex flex-wrap items-center gap-x-2">
           <ShopLogo name={offer.shopName} logoUrl={offer.shopLogoUrl} />
+          {/* Named as well as shown: a mark is recognisable only once you already know it. */}
+          {offer.shopLogoUrl ? (
+            <span className="font-medium text-neutral-900">{offer.shopName}</span>
+          ) : null}
           {cheapest ? (
             <span className="rounded bg-neutral-900 px-1.5 py-0.5 text-[11px] font-semibold text-white">
               {t.cheapest}
