@@ -11,9 +11,6 @@ export const t = {
 
   chooseSize: 'Tvoj broj',
   chooseSizeShort: 'Broj',
-  changeSize: 'Promijeni broj',
-  allSizes: 'Svi brojevi',
-  size: 'Veličina',
   showKids: 'Prikaži dječije brojeve',
   hideKids: 'Sakrij dječije brojeve',
   multiSizeHint: 'Možeš odabrati više brojeva odjednom.',
@@ -24,7 +21,6 @@ export const t = {
   searchPlaceholder: 'npr. air force, dunk, samba',
   resultsFor: 'Rezultati za',
   clearSearch: 'poništi pretragu',
-  orBrowseBySize: 'ili samo odaberi svoj broj',
   brand: 'Brend',
   allBrands: 'Svi brendovi',
 
@@ -48,9 +44,6 @@ export const t = {
   noSizeHere: 'nema tvoj broj',
   styleCode: 'Šifra modela',
   soldOut: 'Trenutno nema ni u jednoj prodavnici.',
-  backToResults: 'Nazad na rezultate',
-  inShop: 'U prodavnici',
-  goToShop: 'Idi u prodavnicu',
   availableSizes: 'Dostupno u brojevima',
   priceNote: 'Cijene se povremeno ažuriraju i mogu se razlikovati u prodavnici.',
 

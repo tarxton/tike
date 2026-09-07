@@ -243,13 +243,23 @@ await withDb(async (db) => {
 
   const grouped = clusters.reduce((n, ids) => n + ids.length, 0);
 
+  // A shoe only one shop sells is still a shoe.
+  //
+  // Singles used to keep product_id null, which meant they had no product page and a
+  // search card had to send them straight out to the shop. That made the site behave in
+  // two different ways depending on something the shopper cannot see. They are products
+  // of one offer instead, and the page simply lists one shop.
+  const clusteredIds = new Set(clusters.flat());
+  const singletons = candidates.filter((c) => !clusteredIds.has(c.offerId)).map((c) => [c.offerId]);
+  const allGroups = [...clusters, ...singletons];
+
   console.log(
     `compared ${comparisons} pairs within ${byBrand.size} brands\n` +
       `  merged:  ${clusters.length} products from ${grouped} offers\n` +
       `  dropped: ${rejected.length} groups spanning an implausible size range\n` +
       `  refused: ${contested} merges that would have doubled up one shop\n` +
       `  review:  ${review.length} uncertain pairs (left unmatched)\n` +
-      `  singles: ${candidates.length - grouped} offers with no counterpart`,
+      `  singles: ${candidates.length - grouped} offers with no counterpart (still products)`,
   );
 
   const multiShop = clusters.filter(
@@ -303,7 +313,7 @@ await withDb(async (db) => {
       }
     }
 
-    const planned = clusters.map((ids) => {
+    const planned = allGroups.map((ids) => {
       // The shortest model name is usually the cleanest: shops append their own
       // qualifiers ("- BUBBLE LOVE", "(GS)") to the same underlying shoe.
       const members = ids

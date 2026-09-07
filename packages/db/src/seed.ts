@@ -11,6 +11,7 @@ import { withDb } from './write-client';
 const shops = [
   {
     slug: 'buzz',
+    logoUrl: '/shops/buzz.webp',
     name: 'Buzz Sneaker Station',
     baseUrl: 'https://www.buzzsneakers.ba',
     platform: 'nbshop' as const,
@@ -20,6 +21,7 @@ const shops = [
   },
   {
     slug: 'sportvision',
+    logoUrl: '/shops/sportvision.svg',
     name: 'Sport Vision',
     baseUrl: 'https://www.sportvision.ba',
     platform: 'nbshop' as const,
@@ -31,6 +33,7 @@ const shops = [
     // unchanged — this row is the entire change. Unlike Buzz and Sport Vision it is not
     // in their corporate group, so its prices move independently.
     slug: 'sportreality',
+    logoUrl: '/shops/sportreality.png',
     name: 'Sport Reality',
     baseUrl: 'https://www.sportreality.ba',
     platform: 'nbshop' as const,
@@ -39,6 +42,7 @@ const shops = [
   },
   {
     slug: 'officeshoes',
+    logoUrl: '/shops/officeshoes.svg',
     name: 'Office Shoes',
     baseUrl: 'https://www.officeshoes.ba',
     platform: 'officeshoes' as const,
@@ -84,6 +88,7 @@ await withDb(async (db) => {
           name: s.name,
           baseUrl: s.baseUrl,
           platform: s.platform,
+          logoUrl: s.logoUrl,
           sitemapUrl: s.sitemapUrl,
           crawlConfig: s.crawlConfig,
         },

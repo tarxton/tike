@@ -61,6 +61,15 @@ export const shop = pgTable(
     name: text('name').notNull(),
     baseUrl: text('base_url').notNull(),
     platform: platformEnum('platform').notNull(),
+    /**
+     * Path to the shop's logo, served by us from /public/shops rather than hotlinked.
+     *
+     * A shopper deciding between two prices wants to know whose prices they are, and a
+     * name in small grey text does not carry that at a glance. Held locally because the
+     * alternative is a request to the retailer's server on every page view — the same
+     * reason product images are not hotlinked.
+     */
+    logoUrl: text('logo_url'),
     sitemapUrl: text('sitemap_url'),
     currency: currencyEnum('currency').notNull().default('BAM'),
     /** Per-shop politeness, overriding the global defaults. Never below robots.txt. */

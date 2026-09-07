@@ -36,6 +36,13 @@
       "when": 1788189759281,
       "tag": "0004_safe_bastion",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788789876294,
+      "tag": "0005_wonderful_galactus",
+      "breakpoints": true
     }
   ]
 }

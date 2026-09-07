@@ -36,6 +36,14 @@ export interface SearchResult {
   productId: number | null;
   /** The product page's slug, when this result is a matched shoe rather than one offer. */
   productSlug: string | null;
+  /**
+   * Every shop in the group, cheapest first.
+   *
+   * "2 prodavnice" tells a shopper how many but not which, and which is what decides
+   * whether the card is worth a click — someone who trusts one retailer and not another
+   * should be able to see that without opening the page.
+   */
+  shops: { slug: string; name: string; logoUrl: string | null }[];
 }
 
 /**
@@ -182,6 +190,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
       select
         o.id, o.shop_id, o.product_id, o.title, o.raw_brand, o.url, o.image_url,
         o.price_minor, o.original_price_minor, o.currency,
+        s.slug as shop_slug, s.name as shop_name, s.logo_url as shop_logo,
         -- Matched offers collapse onto their product; unmatched ones stay their own
         -- group, so nothing disappears from the results while coverage is partial.
         coalesce('p' || o.product_id::text, 'o' || o.id::text) as group_key
@@ -236,6 +245,25 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
         ),
         '[]'::json
       ) as "sizesEu",
+      -- The shops behind the count, cheapest first, so a card can show whose prices
+      -- these are rather than only how many there are.
+      coalesce(
+        (
+          select json_agg(x)
+          from (
+            select
+              c.shop_slug as "slug",
+              c.shop_name as "name",
+              c.shop_logo as "logoUrl",
+              min(c.price_minor) as p
+            from candidate c
+            where c.group_key = g.group_key
+            group by 1, 2, 3
+            order by p asc
+          ) x
+        ),
+        '[]'::json
+      ) as "shops",
       -- Total across every page, in the same round trip. A separate count query would
       -- double the latency and could disagree with the page under concurrent writes.
       count(*) over() as "totalCount"
@@ -259,6 +287,13 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
       offerId: Number(r.offerId),
       productId: r.productId === null ? null : Number(r.productId),
       productSlug: r.productSlug === null ? null : String(r.productSlug),
+      shops: Array.isArray(r.shops)
+        ? (r.shops as { slug: string; name: string; logoUrl: string | null }[]).map((x) => ({
+            slug: String(x.slug),
+            name: String(x.name),
+            logoUrl: x.logoUrl === null ? null : String(x.logoUrl),
+          }))
+        : [],
       shopSlug: String(r.shopSlug),
       shopName: String(r.shopName),
       title: String(r.title),
@@ -337,6 +372,7 @@ export interface ProductOffer {
   offerId: number;
   shopSlug: string;
   shopName: string;
+  shopLogoUrl: string | null;
   /** The shop's own title, which differs from the canonical model and is worth showing. */
   title: string;
   url: string;
@@ -392,6 +428,7 @@ export async function productBySlug(slug: string): Promise<ProductDetail | null>
       o.id            as "offerId",
       s.slug          as "shopSlug",
       s.name          as "shopName",
+      s.logo_url      as "shopLogoUrl",
       o.title         as "title",
       o.url           as "url",
       o.price_minor          as "priceMinor",
@@ -421,6 +458,7 @@ export async function productBySlug(slug: string): Promise<ProductDetail | null>
       offerId: Number(r.offerId),
       shopSlug: String(r.shopSlug),
       shopName: String(r.shopName),
+      shopLogoUrl: r.shopLogoUrl === null ? null : String(r.shopLogoUrl),
       title: String(r.title),
       url: String(r.url),
       priceMinor,

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { SearchResult } from '@tike/db';
+import { ShopLogo } from './shop-logo';
 import { formatPrice, formatSize, pluralShops, t } from '@/lib/messages';
 
 /**
@@ -27,10 +28,10 @@ function goHref(offerId: number, sizes: number[]): string {
 /**
  * Where a card goes when you click it.
  *
- * A matched shoe goes to its product page, because the card is claiming several shops
- * carry it and the click has to be able to make good on that — sending someone to one
- * shop made the count decorative. An unmatched listing is one shop's offer with nothing
- * to compare, so it still goes straight out to the shop.
+ * Always the product page, one shop or five. Sending single-shop results straight out
+ * made the site behave two different ways depending on something the shopper cannot see
+ * from the card, and it skipped the page that shows sizes, the price history and the
+ * freshness note. Matching now gives every offer a product, so the exception is gone.
  */
 function CardLink({
   offer,
@@ -44,7 +45,7 @@ function CardLink({
   const className =
     'flex flex-1 flex-col focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none';
 
-  if (offer.productSlug !== null && offer.shopCount > 1) {
+  if (offer.productSlug !== null) {
     return (
       <Link href={`/patika/${offer.productSlug}`} className={className}>
         {children}
@@ -52,10 +53,9 @@ function CardLink({
     );
   }
 
+  // Only reachable before matching has run over a freshly crawled offer.
   return (
     <a
-      // The size travels with the click: the route logs it, and "which sizes did
-      // shoppers want here" is the most useful number tike can hand a retailer.
       href={goHref(offer.offerId, sizes)}
       rel="nofollow sponsored noopener"
       target="_blank"
@@ -135,6 +135,16 @@ export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: 
               </span>
             ) : null}
 
+            {/*
+             * Whose prices these are, not just how many. A count alone makes someone open
+             * the page to find out whether the shops are ones they would buy from.
+             */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {offer.shops.map((shop) => (
+                <ShopLogo key={shop.slug} name={shop.name} logoUrl={shop.logoUrl} size="sm" />
+              ))}
+            </div>
+
             {multiShop ? (
               <span className="text-xs font-medium text-neutral-700">
                 {offer.shopCount} {pluralShops(offer.shopCount)}
@@ -146,9 +156,7 @@ export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: 
                   </span>
                 ) : null}
               </span>
-            ) : (
-              <span className="text-xs text-neutral-500">{offer.shopName}</span>
-            )}
+            ) : null}
           </div>
         </div>
       </CardLink>

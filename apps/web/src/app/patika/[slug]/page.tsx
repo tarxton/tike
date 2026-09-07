@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { productBySlug, type ProductOffer } from '@tike/db';
 import { formatPrice, formatSize, pluralShops, t } from '@/lib/messages';
 import { getSizes } from '@/lib/size';
+import { ShopLogo } from '@/components/shop-logo';
 
 export const dynamic = 'force-dynamic';
 
@@ -128,7 +129,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <ul className="space-y-3">
             {product.offers.map((offer, i) => (
               <li key={offer.offerId}>
-                <ShopRow offer={offer} selected={selected} cheapest={i === 0} />
+                <ShopRow offer={offer} selected={selected} cheapest={i === 0 && spread > 0} />
               </li>
             ))}
           </ul>
@@ -156,6 +157,7 @@ function ShopRow({
 }: {
   offer: ProductOffer;
   selected: number[];
+  /** Only when some other shop is dearer — "cheapest" of two identical prices says nothing. */
   cheapest: boolean;
 }) {
   const hasYourSize = selected.length > 0 && selected.some((s) => offer.sizesEu.includes(s));
@@ -163,15 +165,22 @@ function ShopRow({
   const extra = offer.sizesEu.length - shown.length;
 
   return (
-    <article
+    // The whole row is the link. A separate "go to shop" button asked people to find the
+    // one live target inside a block that is entirely about one shop.
+    <a
+      href={goHref(offer.offerId, selected, offer.sizesEu)}
+      rel="nofollow sponsored noopener"
+      target="_blank"
       className={[
-        'rounded-xl border bg-white p-4',
+        'block rounded-xl border bg-white p-4 transition',
+        'hover:border-neutral-900 hover:shadow-sm',
+        'focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none',
         cheapest ? 'border-neutral-900' : 'border-neutral-200',
       ].join(' ')}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <div className="flex flex-wrap items-baseline gap-x-2">
-          <span className="font-medium text-neutral-900">{offer.shopName}</span>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-center gap-x-2">
+          <ShopLogo name={offer.shopName} logoUrl={offer.shopLogoUrl} />
           {cheapest ? (
             <span className="rounded bg-neutral-900 px-1.5 py-0.5 text-[11px] font-semibold text-white">
               {t.cheapest}
@@ -232,16 +241,7 @@ function ShopRow({
         ))}
         {extra > 0 ? <li className="px-1 py-0.5 text-[11px] text-neutral-500">+{extra}</li> : null}
       </ul>
-
-      <a
-        href={goHref(offer.offerId, selected, offer.sizesEu)}
-        rel="nofollow sponsored noopener"
-        target="_blank"
-        className="mt-4 inline-block rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-      >
-        {t.goToShop} →
-      </a>
-    </article>
+    </a>
   );
 }
 
