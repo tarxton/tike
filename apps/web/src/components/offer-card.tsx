@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { SearchResult } from '@tike/db';
 import { formatPrice, formatSize, pluralShops, t } from '@/lib/messages';
 
@@ -23,6 +24,48 @@ function goHref(offerId: number, sizes: number[]): string {
   return only === undefined ? `/go/${offerId}` : `/go/${offerId}?velicina=${only}`;
 }
 
+/**
+ * Where a card goes when you click it.
+ *
+ * A matched shoe goes to its product page, because the card is claiming several shops
+ * carry it and the click has to be able to make good on that — sending someone to one
+ * shop made the count decorative. An unmatched listing is one shop's offer with nothing
+ * to compare, so it still goes straight out to the shop.
+ */
+function CardLink({
+  offer,
+  sizes,
+  children,
+}: {
+  offer: SearchResult;
+  sizes: number[];
+  children: React.ReactNode;
+}) {
+  const className =
+    'flex flex-1 flex-col focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none';
+
+  if (offer.productSlug !== null && offer.shopCount > 1) {
+    return (
+      <Link href={`/patika/${offer.productSlug}`} className={className}>
+        {children}
+      </Link>
+    );
+  }
+
+  return (
+    <a
+      // The size travels with the click: the route logs it, and "which sizes did
+      // shoppers want here" is the most useful number tike can hand a retailer.
+      href={goHref(offer.offerId, sizes)}
+      rel="nofollow sponsored noopener"
+      target="_blank"
+      className={className}
+    >
+      {children}
+    </a>
+  );
+}
+
 export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: number[] }) {
   const shownSizes = offer.sizesEu.slice(0, 10);
   const extra = offer.sizesEu.length - shownSizes.length;
@@ -33,14 +76,7 @@ export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: 
 
   return (
     <article className="group flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white transition hover:border-neutral-400">
-      <a
-        // The size travels with the click: the route logs it, and "which sizes did
-        // shoppers want here" is the most useful number tike can hand a retailer.
-        href={goHref(offer.offerId, sizes)}
-        rel="nofollow sponsored noopener"
-        target="_blank"
-        className="flex flex-1 flex-col focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-      >
+      <CardLink offer={offer} sizes={sizes}>
         <div className="aspect-square overflow-hidden bg-neutral-50">
           {offer.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- see note above
@@ -115,7 +151,7 @@ export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: 
             )}
           </div>
         </div>
-      </a>
+      </CardLink>
 
       <div className="border-t border-neutral-100 px-3 py-2">
         <p className="mb-1 text-[11px] text-neutral-500">{t.availableSizes}</p>

@@ -42,6 +42,13 @@ export const t = {
   emptyPage: 'Nema rezultata na toj stranici.',
   backToFirstPage: 'Nazad na prvu stranicu',
 
+  atShops: 'Cijene po prodavnicama',
+  cheapest: 'najjeftinije',
+  yourSize: 'tvoj broj',
+  noSizeHere: 'nema tvoj broj',
+  styleCode: 'Šifra modela',
+  soldOut: 'Trenutno nema ni u jednoj prodavnici.',
+  backToResults: 'Nazad na rezultate',
   inShop: 'U prodavnici',
   goToShop: 'Idi u prodavnicu',
   availableSizes: 'Dostupno u brojevima',

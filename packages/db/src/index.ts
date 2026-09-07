@@ -5,7 +5,10 @@ export {
   searchOffers,
   availableSizes,
   availableBrands,
+  productBySlug,
   type SearchResult,
   type SearchPage,
   type SearchParams,
+  type ProductDetail,
+  type ProductOffer,
 } from './queries';

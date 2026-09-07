@@ -34,6 +34,8 @@ export interface SearchResult {
   shopCount: number;
   /** Null while the listing is unmatched, so the card is really just one shop's offer. */
   productId: number | null;
+  /** The product page's slug, when this result is a matched shoe rather than one offer. */
+  productSlug: string | null;
 }
 
 /**
@@ -209,6 +211,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
     select
       b.id            as "offerId",
       b.product_id    as "productId",
+      pr.slug         as "productSlug",
       s.slug          as "shopSlug",
       s.name          as "shopName",
       b.title         as "title",
@@ -239,6 +242,8 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
     from grouped g
     join candidate b on b.id = g.best_offer_id
     join shop s on s.id = b.shop_id
+    -- Only matched results have a product page to link to.
+    left join product pr on pr.id = b.product_id
     ${resultOrder(query)}
     limit ${limit} offset ${offset}
   `);
@@ -253,6 +258,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
     return {
       offerId: Number(r.offerId),
       productId: r.productId === null ? null : Number(r.productId),
+      productSlug: r.productSlug === null ? null : String(r.productSlug),
       shopSlug: String(r.shopSlug),
       shopName: String(r.shopName),
       title: String(r.title),
@@ -324,4 +330,117 @@ export async function availableBrands(
     brand: String(r.brand),
     count: Number(r.count),
   }));
+}
+
+/** One shop's listing of a product, as the product page shows it. */
+export interface ProductOffer {
+  offerId: number;
+  shopSlug: string;
+  shopName: string;
+  /** The shop's own title, which differs from the canonical model and is worth showing. */
+  title: string;
+  url: string;
+  priceMinor: number;
+  originalPriceMinor: number | null;
+  discountPercent: number | null;
+  currency: string;
+  /** In-stock EU sizes at this shop, ascending. */
+  sizesEu: number[];
+}
+
+export interface ProductDetail {
+  id: number;
+  slug: string;
+  model: string;
+  brand: string | null;
+  styleCode: string | null;
+  gender: string | null;
+  heroImageUrl: string | null;
+  /** Cheapest first — the order the page presents them in. */
+  offers: ProductOffer[];
+}
+
+/**
+ * One shoe and every shop that sells it.
+ *
+ * The whole point of matching, finally rendered: a result card can say "3 prodavnice"
+ * only because this page can answer which three and at what price. Out-of-stock offers
+ * are left out — a shop that has stopped selling it is not a place to buy it — so a
+ * product whose every offer has been retired returns its rows with an empty `offers`.
+ */
+export async function productBySlug(slug: string): Promise<ProductDetail | null> {
+  const rows = await db().execute(sql`
+    select
+      p.id              as "id",
+      p.slug            as "slug",
+      p.model           as "model",
+      b.name            as "brand",
+      p.style_code      as "styleCode",
+      p.gender::text    as "gender",
+      p.hero_image_url  as "heroImageUrl"
+    from product p
+    left join brand b on b.id = p.brand_id
+    where p.slug = ${slug}
+    limit 1
+  `);
+
+  const head = (rows.rows as Record<string, unknown>[])[0];
+  if (!head) return null;
+
+  const offerRows = await db().execute(sql`
+    select
+      o.id            as "offerId",
+      s.slug          as "shopSlug",
+      s.name          as "shopName",
+      o.title         as "title",
+      o.url           as "url",
+      o.price_minor          as "priceMinor",
+      o.original_price_minor as "originalPriceMinor",
+      o.currency::text as "currency",
+      coalesce(
+        (
+          select json_agg(f.size_eu order by f.size_eu)
+          from offer_size f
+          where f.offer_id = o.id and f.in_stock
+        ),
+        '[]'::json
+      ) as "sizesEu"
+    from offer o
+    join shop s on s.id = o.shop_id
+    where o.product_id = ${Number(head.id)}
+      and o.in_stock
+      and s.active
+    order by o.price_minor asc, s.slug asc
+  `);
+
+  const offers = (offerRows.rows as Record<string, unknown>[]).map((r) => {
+    const priceMinor = Number(r.priceMinor);
+    const originalPriceMinor = r.originalPriceMinor === null ? null : Number(r.originalPriceMinor);
+    const onSale = originalPriceMinor !== null && originalPriceMinor > priceMinor;
+    return {
+      offerId: Number(r.offerId),
+      shopSlug: String(r.shopSlug),
+      shopName: String(r.shopName),
+      title: String(r.title),
+      url: String(r.url),
+      priceMinor,
+      originalPriceMinor: onSale ? originalPriceMinor : null,
+      discountPercent: onSale
+        ? Math.round(((originalPriceMinor - priceMinor) / originalPriceMinor) * 100)
+        : null,
+      currency: String(r.currency),
+      sizesEu: Array.isArray(r.sizesEu) ? r.sizesEu.map(Number) : [],
+    };
+  });
+
+  return {
+    id: Number(head.id),
+    slug: String(head.slug),
+    model: String(head.model),
+    brand: head.brand === null ? null : String(head.brand),
+    styleCode: head.styleCode === null ? null : String(head.styleCode),
+    gender: head.gender === null ? null : String(head.gender),
+    heroImageUrl: head.heroImageUrl === null ? null : String(head.heroImageUrl),
+    offers,
+  };
 }
