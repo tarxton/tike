@@ -88,7 +88,14 @@ export interface SearchParams {
    * 45 and 46 and want to see either.
    */
   sizesEu?: number[];
-  brand?: string;
+  /**
+   * Brand names to include. Empty means every brand.
+   *
+   * Several rather than one because the question is usually "Nike or adidas, in my
+   * size" — a shopper comparing two brands had to run two searches and hold the
+   * cheaper result in their head.
+   */
+  brands?: string[];
   query?: string;
   /**
    * Include listings that only come in children's sizes.
@@ -232,6 +239,21 @@ function shopFilter(shops: string[] | undefined) {
 }
 
 /**
+ * `unaccent(lower(raw_brand)) in (...)`, folded on both sides.
+ *
+ * Folding is not decoration here: shops write the same brand differently, and a chip
+ * built from one shop's spelling must still select the other's.
+ */
+function brandFilter(brands: string[] | undefined) {
+  if (!brands || brands.length === 0) return sql``;
+  const list = sql.join(
+    brands.map((b) => sql`unaccent(lower(${b}))`),
+    sql`, `,
+  );
+  return sql`and unaccent(lower(o.raw_brand)) in (${list})`;
+}
+
+/**
  * `o.gender in (...)`, and always the unlabelled ones too.
  *
  * Excluding nulls would quietly hide a third of the catalogue behind a filter that
@@ -270,7 +292,7 @@ function sizeFilter(sizesEu: number[] | undefined) {
 export async function searchOffers(params: SearchParams = {}): Promise<SearchPage> {
   const {
     sizesEu,
-    brand,
+    brands,
     query,
     includeKids,
     onSale,
@@ -310,7 +332,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
         ${saleFilter(onSale)}
         ${shopFilter(shops)}
         ${genderFilter(genders)}
-        ${brand === undefined ? sql`` : sql`and unaccent(lower(o.raw_brand)) = unaccent(lower(${brand}))`}
+        ${brandFilter(brands)}
         ${titleFilter(query)}
     ),
     grouped as (
@@ -459,6 +481,11 @@ export async function availableSizes(): Promise<number[]> {
  * Counts respect the active size filter: with EU 44 selected, "Nike 14" must mean
  * fourteen Nikes available in 44, not fourteen Nikes in the catalogue. A facet count
  * that ignores the current filter promises results the click cannot deliver.
+ *
+ * The brand selection is the one filter deliberately left out. Brands are OR-ed, so
+ * "Puma 120" answers "how many more if I add Puma" — applying the selection to its own
+ * facet would zero every brand the user has not already picked, and a filter that
+ * erases its own remaining options cannot be widened.
  */
 export async function availableBrands(
   params: {

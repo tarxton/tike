@@ -26,7 +26,7 @@ export function SortSelect({
   sort,
   query,
   sizes,
-  brand,
+  brands,
   showKids,
   onSale,
   shops,
@@ -35,7 +35,7 @@ export function SortSelect({
   sort: SortKey | undefined;
   query?: string;
   sizes: number[];
-  brand?: string;
+  brands: string[];
   showKids: boolean;
   onSale: boolean;
   shops: string[];
@@ -50,7 +50,7 @@ export function SortSelect({
     <form method="get" action="/patike" className="flex items-center gap-2">
       {query ? <input type="hidden" name="q" value={query} /> : null}
       {sizes.length > 0 ? <input type="hidden" name="velicina" value={sizes.join(',')} /> : null}
-      {brand ? <input type="hidden" name="brend" value={brand} /> : null}
+      {brands.length > 0 ? <input type="hidden" name="brend" value={brands.join(',')} /> : null}
       {showKids ? <input type="hidden" name="djecije" value="1" /> : null}
       {onSale ? <input type="hidden" name="akcija" value="1" /> : null}
       {shops.length > 0 ? <input type="hidden" name="prodavnica" value={shops.join(',')} /> : null}

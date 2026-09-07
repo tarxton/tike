@@ -36,7 +36,7 @@ export default async function Results({
   // The URL wins over the cookie, so a shared link shows what the sender saw.
   const urlSizes = parseSizes(first('velicina'));
   const selected = urlSizes.length > 0 ? urlSizes : await getSizes();
-  const brand = first('brend');
+  const brands = parseList(first('brend'));
   const query = first('q');
   const showKids = first('djecije') === '1';
   const page = parsePage(first('strana'));
@@ -50,10 +50,10 @@ export default async function Results({
     (GENDERS as readonly { value: string }[]).some((x) => x.value === g),
   );
 
-  const [results, sizes, brands, allShops] = await Promise.all([
+  const [results, sizes, brandFacets, allShops] = await Promise.all([
     searchOffers({
       sizesEu: selected,
-      brand,
+      brands,
       query,
       includeKids: showKids,
       onSale,
@@ -68,9 +68,28 @@ export default async function Results({
     availableShops(),
   ]);
 
+  const selectedBrands = new Set(brands.map((b) => b.toLowerCase()));
+  // Every brand chip worth showing: the top of the facet list, plus any brand the user
+  // has already picked. A selected chip that falls outside the cut — or whose count drops
+  // to zero under the other filters — must still render, or the filter cannot be switched
+  // off except by editing the URL.
+  const brandChips = [
+    ...brandFacets.slice(0, 12),
+    ...brandFacets.slice(12).filter((b) => selectedBrands.has(b.brand.toLowerCase())),
+    ...brands
+      .filter((b) => !brandFacets.some((f) => f.brand.toLowerCase() === b.toLowerCase()))
+      .map((brand) => ({ brand, count: 0 })),
+  ];
+  const toggleBrand = (value: string) => {
+    const lower = value.toLowerCase();
+    return selectedBrands.has(lower)
+      ? brands.filter((b) => b.toLowerCase() !== lower)
+      : [...brands, value];
+  };
+
   const hasFilters =
     selected.length > 0 ||
-    Boolean(brand) ||
+    brands.length > 0 ||
     Boolean(query) ||
     onSale ||
     shops.length > 0 ||
@@ -111,7 +130,7 @@ export default async function Results({
           showKids={showKids}
           kidsHref={buildHref({
             sizes: selected,
-            brand,
+            brands,
             query,
             kids: !showKids,
             sort,
@@ -120,7 +139,7 @@ export default async function Results({
             genders,
           })}
           query={query}
-          brand={brand}
+          brands={brands}
           compact
         />
       </section>
@@ -131,7 +150,7 @@ export default async function Results({
           <Link
             href={buildHref({
               sizes: selected,
-              brand,
+              brands,
               kids: showKids,
               sort,
               onSale,
@@ -153,7 +172,7 @@ export default async function Results({
             sort={sort}
             query={query}
             sizes={selected}
-            brand={brand}
+            brands={brands}
             showKids={showKids}
             onSale={onSale}
             shops={shops}
@@ -170,7 +189,7 @@ export default async function Results({
         hrefFor={(change) =>
           buildHref({
             sizes: selected,
-            brand,
+            brands,
             query,
             kids: showKids,
             sort,
@@ -185,7 +204,7 @@ export default async function Results({
         <FilterChip
           href={buildHref({
             sizes: selected,
-            brand: undefined,
+            brands: [],
             query,
             kids: showKids,
             sort,
@@ -193,16 +212,16 @@ export default async function Results({
             shops,
             genders,
           })}
-          active={!brand}
+          active={brands.length === 0}
         >
           {t.allBrands}
         </FilterChip>
-        {brands.slice(0, 12).map((b) => (
+        {brandChips.map((b) => (
           <FilterChip
             key={b.brand}
             href={buildHref({
               sizes: selected,
-              brand: b.brand,
+              brands: toggleBrand(b.brand),
               query,
               kids: showKids,
               sort,
@@ -210,7 +229,7 @@ export default async function Results({
               shops,
               genders,
             })}
-            active={brand?.toLowerCase() === b.brand.toLowerCase()}
+            active={selectedBrands.has(b.brand.toLowerCase())}
           >
             {b.brand} <span className="text-neutral-400 tabular-nums">{b.count}</span>
           </FilterChip>
@@ -223,7 +242,7 @@ export default async function Results({
           <Link
             href={buildHref({
               sizes: selected,
-              brand,
+              brands,
               query,
               kids: showKids,
               sort,
@@ -270,7 +289,7 @@ export default async function Results({
             hrefFor={(p) =>
               buildHref({
                 sizes: selected,
-                brand,
+                brands,
                 query,
                 kids: showKids,
                 sort,
@@ -311,7 +330,7 @@ function parsePage(raw: string | undefined): number {
 
 function buildHref({
   sizes,
-  brand,
+  brands,
   query,
   kids,
   page,
@@ -321,7 +340,7 @@ function buildHref({
   genders,
 }: {
   sizes: number[];
-  brand?: string;
+  brands?: string[];
   query?: string;
   kids?: boolean;
   page?: number;
@@ -332,7 +351,7 @@ function buildHref({
 }): string {
   const sp = new URLSearchParams();
   if (sizes.length > 0) sp.set('velicina', sizes.join(','));
-  if (brand) sp.set('brend', brand);
+  if (brands && brands.length > 0) sp.set('brend', brands.join(','));
   if (query) sp.set('q', query);
   if (kids) sp.set('djecije', '1');
   // Page one is the bare URL: a filter change should never land on page 7 of nothing.

@@ -24,7 +24,7 @@ export function Filters({
   showKids = false,
   kidsHref,
   query,
-  brand,
+  brands = [],
   compact = false,
   returnTo = '/patike',
 }: {
@@ -33,7 +33,7 @@ export function Filters({
   showKids?: boolean;
   kidsHref: string;
   query?: string;
-  brand?: string;
+  brands?: string[];
   /** Results page: tighter spacing, since the grid is above the fold. */
   compact?: boolean;
   /** Where "clear" returns to. On the home page, clearing must not run a search. */
@@ -45,7 +45,7 @@ export function Filters({
   return (
     <form action={applyFilters} className={compact ? 'space-y-3' : 'space-y-5'}>
       {showKids ? <input type="hidden" name="djecije" value="1" /> : null}
-      {brand ? <input type="hidden" name="brend" value={brand} /> : null}
+      {brands.length > 0 ? <input type="hidden" name="brend" value={brands.join(',')} /> : null}
       <input type="hidden" name="returnTo" value={returnTo} />
 
       <input
