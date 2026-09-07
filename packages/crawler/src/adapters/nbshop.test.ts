@@ -19,6 +19,29 @@ const parseFixture = (i: number) => {
   return parseNbshop(load(entry.file), entry.url);
 };
 
+const URL = 'https://www.buzzsneakers.ba/patike/1-test';
+
+/**
+ * A minimal NBSHOP page. Gender comes from JSON-LD prose that no captured fixture
+ * happens to carry, so these cases are built rather than captured.
+ */
+function page({ name = 'Nike Patike Dunk Low', description = '' }): string {
+  const ld = JSON.stringify({
+    '@type': 'Product',
+    name,
+    productID: '1',
+    description,
+    offers: { price: '199.00', priceCurrency: 'BAM' },
+  });
+  return [
+    '<html><head>',
+    `<script type="application/ld+json">${ld}</script>`,
+    '</head><body>',
+    '<ul class="product-attributes"><li data-productsize-name="42"><span class="eur-size">42</span></li></ul>',
+    '</body></html>',
+  ].join('');
+}
+
 describe('parseNbshop', () => {
   it('parses every captured fixture without throwing', () => {
     for (const entry of manifest) {
@@ -110,6 +133,37 @@ describe('parseNbshop', () => {
   it('detects a women product', () => {
     const offer = parseFixture(1); // Nike W Air Force 1 '07
     expect(offer.gender).toBe('women');
+  });
+
+  it('reads gender from the shop’s own description when the title is silent', () => {
+    // "Nike Dunk Low Retro" says nothing about who it is for, and two thirds of the
+    // catalogue is like that. The prose does.
+    const offer = parseNbshop(
+      page({ description: 'PUMA Speedcat Go ženske patike su moderna...' }),
+      URL,
+    );
+    expect(offer.gender).toBe('women');
+  });
+
+  it('calls a description addressing both genders unisex', () => {
+    const offer = parseNbshop(
+      page({ description: 'Model za muškarce i žene, pogodan za svakodnevno nošenje.' }),
+      URL,
+    );
+    expect(offer.gender).toBe('unisex');
+  });
+
+  it('lets a size-class code outrank prose, because mislabelling a child’s shoe is the costly error', () => {
+    const offer = parseNbshop(
+      page({ name: 'Nike Patike Air Max GS', description: 'Muške patike za trening.' }),
+      URL,
+    );
+    expect(offer.gender).toBe('kids');
+  });
+
+  it('stays null when neither the title nor the prose says', () => {
+    const offer = parseNbshop(page({ description: 'Klasičan model, koTn gornji dio.' }), URL);
+    expect(offer.gender).toBeNull();
   });
 
   it('never returns an empty size list for a valid product page', () => {

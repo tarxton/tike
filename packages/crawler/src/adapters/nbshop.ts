@@ -23,6 +23,7 @@ interface JsonLdProduct {
   gtin13?: string;
   image?: string | string[];
   brand?: string | { name?: string };
+  description?: string;
   offers?: {
     price?: string | number;
     priceCurrency?: string;
@@ -144,16 +145,47 @@ function tooltipValue(tooltip: string, system: 'EU' | 'UK' | 'US'): string {
 }
 
 /**
- * Gender is not in the JSON-LD, so it comes from the breadcrumb and title, both of
- * which are in Bosnian. Returns null rather than guessing — an unknown gender is
- * better than a wrong one, since it drives both filtering and size conversion.
+ * Gender, from the strongest available signal.
+ *
+ * These pages carry no breadcrumb and no per-product gender attribute — `data-productCategory`
+ * is empty — so reading only the title left 93% of the catalogue unlabelled, because
+ * "Nike Dunk Low Retro" simply does not say who it is for.
+ *
+ * The shop's own prose does: two thirds of otherwise-unlabelled products describe
+ * themselves as "ženske patike" or "muške". That prose outranks a single-letter title
+ * marker, which is easy to hit by accident inside a model name. Size-class codes are
+ * checked first because BP/GS/TD are unambiguous, and mislabelling a child's shoe is the
+ * expensive error — it is what puts a toddler shoe in front of someone filtering size 44.
+ *
+ * Whole-page scanning is deliberately avoided: the navigation links to "za-muskarce" on
+ * every page, so a document-wide search would label the entire catalogue men's.
  */
-function extractGender($: CheerioAPI, title: string): Gender | null {
-  const haystack = `${$('.breadcrumb').text()} ${title}`.toLowerCase();
-  if (/\b(bebe|djec|dje[čc]|kids|junior|\bbp\b|\bps\b|\btd\b|\bgs\b)/.test(haystack)) return 'kids';
-  if (/\b(zene|žene|ženske|zenske|women|\bw\b|wmns)/.test(haystack)) return 'women';
-  if (/\b(muskarce|muškarce|muške|muske|men|\bm\b)/.test(haystack)) return 'men';
-  if (/\bunisex\b/.test(haystack)) return 'unisex';
+function extractGender(title: string, description: string | null): Gender | null {
+  const name = title.toLowerCase();
+
+  // Manufacturer size-class codes. Unambiguous, and they prevent the worst error.
+  if (/\b(bp|ps|td|gs)\b/.test(name)) return 'kids';
+
+  const prose = (description ?? '').toLowerCase();
+  const kidsWord = /(bebe|djec|dje[čć]|djevoj|kids|junior)/;
+  // "žene" as a standalone noun as well as the adjective: shop prose writes both
+  // "ženske patike" and "za muškarce i žene", and only the second form makes a
+  // description unisex rather than men's.
+  const womenWord = /([zž]ensk|[zž]en[ae]\b|women|wmns)/;
+  const menWord = /(mu[sš]k|\bmen\b)/;
+
+  if (kidsWord.test(prose)) return 'kids';
+  // Prose addressing both is describing a unisex shoe, not contradicting itself.
+  if (womenWord.test(prose) && menWord.test(prose)) return 'unisex';
+  if (/\bunisex\b/.test(prose)) return 'unisex';
+  if (womenWord.test(prose)) return 'women';
+  if (menWord.test(prose)) return 'men';
+
+  // Title markers last: weaker, but they are all some products have.
+  if (kidsWord.test(name)) return 'kids';
+  if (/\b(zene|žene|ženske|zenske|women|w|wmns)\b/.test(name)) return 'women';
+  if (/\b(muskarce|muškarce|muške|muske|men|m)\b/.test(name)) return 'men';
+  if (/\bunisex\b/.test(name)) return 'unisex';
   return null;
 }
 
@@ -184,7 +216,7 @@ export function parseNbshop(html: string, url: string): ParsedOffer {
     priceRaw,
     originalPriceRaw: extractOriginalPrice($, priceRaw),
     currency: currency === 'EUR' ? ('EUR' as const) : ('BAM' as const),
-    gender: extractGender($, title),
+    gender: extractGender(title, ld.description ?? null),
     sizes,
   };
 
