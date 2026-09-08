@@ -94,8 +94,9 @@ export default async function Results({
   // A selected brand whose count drops to zero under the other filters disappears from
   // the facet list entirely, so it is appended here or the filter could not be switched
   // off except by editing the URL.
-  // Selected brands lead, so a picked chip is never the one clipped by the two-row
-  // collapse — the same trap the old top-twelve cut had, in a new shape.
+  //
+  // Selected brands then lead, so a picked chip is never the one clipped by the two-row
+  // collapse — the same trap the old cut had, in a new shape.
   const brandChips = [
     ...brandFacets,
     ...brands
