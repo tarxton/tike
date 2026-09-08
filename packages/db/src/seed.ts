@@ -87,6 +87,9 @@ const shops = [
       // Product type is inside the slug ("nike-patike-air-max-…"), never a path segment,
       // so the same contains-filter Office Shoes needs. 3,642 of 14,291 sitemap URLs.
       pathContains: ['-patike-'],
+      // Their own articles are titled after the products they discuss, so they match the
+      // filter above and then fail to parse as products, which they are not.
+      pathDeny: ['/blog/'],
       // Their Cloudflare rejects Node's TLS fingerprint and accepts curl carrying the
       // identical tike-bot User-Agent, from the same machine and IP. Their operator gave
       // written permission to crawl, so the client is what changes here, not the identity

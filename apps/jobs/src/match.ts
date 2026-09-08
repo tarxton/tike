@@ -298,7 +298,21 @@ await withDb(async (db) => {
       .returning({ id: product.id });
 
     // Brands in one statement rather than one per brand.
-    const brandNames = [...new Set(candidates.map((c) => c.brand).filter(Boolean) as string[])];
+    //
+    // Deduplicated by slug, not by name: shops disagree on capitalisation, so Djak's
+    // "NIKE" and Buzz's "Nike" are two names for one slug. Postgres refuses an upsert
+    // whose batch touches the same conflict target twice — "ON CONFLICT DO UPDATE command
+    // cannot affect row a second time" — and the whole match job died on it the first time
+    // a fifth shop wrote brands in caps.
+    const brandNames: string[] = [];
+    const seenSlugs = new Set<string>();
+    for (const c of candidates) {
+      if (!c.brand) continue;
+      const slug = slugify(c.brand);
+      if (!slug || seenSlugs.has(slug)) continue;
+      seenSlugs.add(slug);
+      brandNames.push(c.brand);
+    }
     const brandIds = new Map<string, number>();
     if (brandNames.length > 0) {
       const saved = await tx

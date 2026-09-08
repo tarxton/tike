@@ -45,6 +45,15 @@ export const crawlConfigSchema = z.object({
    * so its categories have to be walked page by page instead.
    */
   /**
+   * Paths to exclude even when they match the filters above.
+   *
+   * `pathContains` looks anywhere in a URL, so a shop that writes about its products
+   * catches its own articles: Djak's "/blog/post/najbolje-patike-za-djecake-…" contains
+   * "-patike-" as surely as any product does. Two pages is not much, but each one is a
+   * fetch that could never succeed and a parse failure counted against the shop's markup.
+   */
+  pathDeny: z.array(z.string().min(1)).default([]),
+  /**
    * Which HTTP client fetches this shop.
    *
    * Opt-in per shop, never an automatic fallback. Djak's Cloudflare rejects Node's client

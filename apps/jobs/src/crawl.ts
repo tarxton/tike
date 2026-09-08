@@ -181,7 +181,7 @@ await withDb(async (db) => {
   const inScope = filterByPathContains(
     filterByPath(discovered, config.pathAllow),
     config.pathContains,
-  );
+  ).filter((url) => !config.pathDeny.some((deny) => url.includes(deny)));
   const urls = inScope.slice(0, Number.isFinite(limit) ? limit : undefined);
   console.log(
     `discovery found ${discovered.length} urls; ${inScope.length} in scope ` +
