@@ -55,6 +55,7 @@ export const t = {
   emptyPage: 'Nema rezultata na toj stranici.',
   backToFirstPage: 'Nazad na prvu stranicu',
 
+  backToSearch: 'Nazad na pretragu',
   atShops: 'Cijene po prodavnicama',
   cheapest: 'najjeftinije',
   yourSize: 'tvoj broj',

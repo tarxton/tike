@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { goHref } from './page';
+import { backHref, goHref } from './page';
 
 describe('goHref', () => {
   it('carries the size when this shop stocks it', () => {
@@ -18,5 +18,32 @@ describe('goHref', () => {
 
   it('carries nothing when no size is selected', () => {
     expect(goHref(12, [], [42, 43, 44])).toBe('/go/12');
+  });
+});
+
+describe('backHref', () => {
+  it('returns to the results page the visitor came from, filters intact', () => {
+    expect(backHref('http://localhost:3000/patike?q=nike&velicina=44&akcija=1')).toBe(
+      '/patike?q=nike&velicina=44&akcija=1',
+    );
+  });
+
+  it('falls back to a plain search when there is no referer', () => {
+    expect(backHref(null)).toBe('/patike');
+  });
+
+  it('discards the host, so an external referer cannot redirect off-site', () => {
+    expect(backHref('https://evil.example.com/patike?q=x')).toBe('/patike?q=x');
+  });
+
+  it('ignores a referer that is not a results page', () => {
+    // Product to product, or in from the home page: "back" should not send someone to a
+    // page they have never seen.
+    expect(backHref('http://localhost:3000/patika/nesto-drugo')).toBe('/patike');
+    expect(backHref('http://localhost:3000/')).toBe('/patike');
+  });
+
+  it('survives a malformed referer', () => {
+    expect(backHref('not a url')).toBe('/patike');
   });
 });

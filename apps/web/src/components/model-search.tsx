@@ -177,13 +177,21 @@ export function ModelSearch({ defaultValue }: { defaultValue?: string }) {
                 }}
                 onMouseEnter={() => setActive(i)}
                 className={[
-                  'flex w-full items-baseline gap-2 px-3 py-2 text-left text-sm',
+                  'flex w-full items-baseline gap-3 px-3 py-2 text-left text-sm',
                   i === active ? 'bg-neutral-100' : 'bg-white',
                 ].join(' ')}
               >
-                {s.brand ? <span className="text-neutral-500">{s.brand}</span> : null}
-                <span className="font-medium text-neutral-900">{s.model}</span>
-                <span className="ml-auto shrink-0 text-xs text-neutral-400 tabular-nums">
+                {/*
+                 * Brand and model are one name, so they sit in one span separated by an
+                 * ordinary word space. As separate flex items they were 8px apart and
+                 * every row started its model at a different x, which read as a column
+                 * that had failed to line up rather than as "Nike Air Max".
+                 */}
+                <span className="min-w-0 flex-1 truncate">
+                  {s.brand ? <span className="text-neutral-500">{s.brand} </span> : null}
+                  <span className="font-medium text-neutral-900">{s.model}</span>
+                </span>
+                <span className="shrink-0 text-xs text-neutral-400 tabular-nums">
                   {s.colourways > 1 ? `${s.colourways} ${pluralColours(s.colourways)}` : null}
                   {s.colourways > 1 && s.shopCount > 1 ? ' · ' : null}
                   {s.shopCount > 1 ? `${s.shopCount} ${pluralShops(s.shopCount)}` : null}

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { productBySlug, type ProductOffer } from '@tike/db';
 import { formatPrice, formatSize, pluralShops, t } from '@/lib/messages';
@@ -37,10 +38,35 @@ export async function generateMetadata({
   };
 }
 
+/**
+ * Where "back" goes: the results page the visitor came from, filters and all.
+ *
+ * Only the path and query are ever reused, never the host, so this cannot become a
+ * redirect to somewhere else — and it only accepts `/patike`, so arriving from another
+ * product, the home page or an external link falls back to a plain search rather than
+ * bouncing the visitor somewhere they have not been.
+ */
+export function backHref(referer: string | null): string {
+  if (!referer) return '/patike';
+  try {
+    const url = new URL(referer);
+    if (url.pathname === '/patike') return url.pathname + url.search;
+  } catch {
+    // A malformed Referer is not worth a 500.
+  }
+  return '/patike';
+}
+
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [product, selected] = await Promise.all([productBySlug(slug), getSizes()]);
+  const [product, selected, requestHeaders] = await Promise.all([
+    productBySlug(slug),
+    getSizes(),
+    headers(),
+  ]);
   if (!product) notFound();
+
+  const back = backHref(requestHeaders.get('referer'));
 
   const name = [product.brand, product.model].filter(Boolean).join(' ');
   const cheapest = product.offers[0];
@@ -49,9 +75,15 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   return (
     <main className="mx-auto max-w-4xl px-5 py-8">
-      <header className="mb-6">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <Link href="/" className="text-xl font-semibold tracking-tight text-neutral-900">
           {t.siteName}
+        </Link>
+        <Link
+          href={back}
+          className="inline-flex items-center gap-1.5 text-sm text-neutral-600 underline-offset-4 hover:text-neutral-900 hover:underline"
+        >
+          <span aria-hidden="true">←</span> {t.backToSearch}
         </Link>
       </header>
 
