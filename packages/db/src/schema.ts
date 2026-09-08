@@ -307,6 +307,40 @@ export const click = pgTable(
 );
 
 /** Logged zero-result searches — the best signal for missing catalogue or bad synonyms. */
+/**
+ * Product images copied to our own storage, keyed by where they came from.
+ *
+ * Hotlinking was never the plan (§3) and Djak forced the issue: they serve images only to
+ * their own pages, so every Đak card rendered a broken image. Copying a thumbnail once
+ * and serving it ourselves also stops tike putting a request on a retailer's servers for
+ * every page view — the reason the plan said not to hotlink in the first place.
+ *
+ * Keyed by source URL rather than by offer: shops reuse an image across colourways and
+ * across re-crawls, and an offer row is rewritten on every crawl while the picture behind
+ * it is the same file. This way the same URL is fetched once, ever.
+ */
+export const imageCache = pgTable(
+  'image_cache',
+  {
+    /** The shop's own URL, exactly as the adapter reported it. */
+    sourceUrl: text('source_url').primaryKey(),
+    /** Object key within the bucket. The public URL is this plus a configured prefix. */
+    key: text('key').notNull(),
+    width: integer('width'),
+    height: integer('height'),
+    bytes: integer('bytes'),
+    /**
+     * Why a URL has no object, when it has none.
+     *
+     * A recorded failure is what stops the job retrying the same dead image nightly for
+     * the rest of the project's life.
+     */
+    error: text('error'),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('image_cache_key_idx').on(t.key)],
+);
+
 export const searchMiss = pgTable(
   'search_miss',
   {

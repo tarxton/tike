@@ -43,6 +43,13 @@
       "when": 1788789876294,
       "tag": "0005_wonderful_galactus",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788907391385,
+      "tag": "0006_woozy_krista_starr",
+      "breakpoints": true
     }
   ]
 }

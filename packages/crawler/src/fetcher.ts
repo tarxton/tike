@@ -139,6 +139,93 @@ export class PoliteFetcher {
     return run;
   }
 
+  /**
+   * The same request, for a file rather than a page.
+   *
+   * Shares every guarantee `get` makes — robots, spacing, transport, retries — because an
+   * image is another request to the same shop's servers and they do not care that it is
+   * binary. Djak proved the transport part matters here too: its CDN answered some image
+   * requests from Node with a 403 and every one from curl with a 200.
+   */
+  async getBinary(url: string): Promise<Uint8Array> {
+    if (!this.isAllowed(url)) {
+      throw new RobotsDisallowedError(`robots.txt disallows ${url}`);
+    }
+    const run = this.queue.then(async () => {
+      const headers = { 'user-agent': USER_AGENT };
+      for (let attempt = 0; ; attempt += 1) {
+        const wait = this.lastRequestAt + this.minDelayMs - Date.now();
+        if (wait > 0) await sleep(wait);
+        this.lastRequestAt = Date.now();
+
+        const { status, body } =
+          this.transport === 'curl'
+            ? await this.getBinaryViaCurl(url, headers)
+            : await this.getBinaryViaFetch(url, headers);
+
+        if (status === 403) throw new ForbiddenError(`403 from ${url}`);
+        if (status >= 200 && status < 300) return body;
+        if (isRetriable(status) && attempt < MAX_RETRIES) {
+          await sleep(RETRY_BASE_MS * 2 ** attempt);
+          continue;
+        }
+        throw new FetchError(`${status} from ${url}`, status, url);
+      }
+    });
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
+  private async getBinaryViaFetch(
+    url: string,
+    headers: Record<string, string>,
+  ): Promise<{ status: number; body: Uint8Array }> {
+    const res = await fetch(url, { headers });
+    return { status: res.status, body: new Uint8Array(await res.arrayBuffer()) };
+  }
+
+  /**
+   * curl, with the body kept as bytes.
+   *
+   * The status marker is searched for in the buffer rather than in a decoded string:
+   * decoding a JPEG as UTF-8 to find a delimiter would corrupt the very bytes being
+   * fetched.
+   */
+  private async getBinaryViaCurl(
+    url: string,
+    headers: Record<string, string>,
+  ): Promise<{ status: number; body: Uint8Array }> {
+    const headerArgs = Object.entries(headers).flatMap(([k, v]) => ['--header', `${k}: ${v}`]);
+    const { stdout } = await execFileAsync(
+      'curl',
+      [
+        '--silent',
+        '--show-error',
+        '--location',
+        '--max-time',
+        '45',
+        ...headerArgs,
+        '--write-out',
+        `${STATUS_MARKER}%{http_code}`,
+        url,
+      ],
+      { maxBuffer: 64 * 1024 * 1024, encoding: 'buffer' },
+    );
+
+    const buf = stdout as unknown as Buffer;
+    const marker = Buffer.from(STATUS_MARKER, 'utf-8');
+    const at = buf.lastIndexOf(marker);
+    if (at === -1) throw new Error(`curl returned no status for ${url}`);
+    const status = Number(
+      buf
+        .subarray(at + marker.length)
+        .toString('utf-8')
+        .trim(),
+    );
+    if (!Number.isFinite(status)) throw new Error(`curl returned an unreadable status for ${url}`);
+    return { status, body: new Uint8Array(buf.subarray(0, at)) };
+  }
+
   private async getViaFetch(
     url: string,
     headers: Record<string, string>,

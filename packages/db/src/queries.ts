@@ -377,6 +377,28 @@ export async function logSearchMiss(params: {
  */
 const FUZZY_THRESHOLD = 0.4;
 
+/**
+ * The public URL of our stored copy of an offer's image, or null.
+ *
+ * A correlated lookup rather than a join, so it can be dropped into an existing select
+ * list without changing the shape of the query around it. `image_cache.source_url` is the
+ * primary key, so each one is a single index probe.
+ *
+ * Rows with an `error` are deliberately excluded: a recorded failure means there is no
+ * object to serve, and the shop's own URL is still the best thing to try.
+ */
+const R2_PUBLIC_BASE = (process.env.R2_PUBLIC_BASE_URL ?? '').replace(/\/$/, '');
+
+const cachedImageUrl = R2_PUBLIC_BASE
+  ? sql`(
+      select ${R2_PUBLIC_BASE} || '/' || c.key
+      from image_cache c
+      where c.source_url = o.image_url and c.error is null
+    )`
+  : // Nothing stored anywhere yet, so every image is the shop's own. Written as a literal
+    // null so the coalesce around it still type-checks and the query plan is unchanged.
+    sql`null`;
+
 /** The title folded to letters, digits and spaces — what trigram matching compares. */
 const spacedTitle = sql`regexp_replace(unaccent(lower(o.title)), '[^a-z0-9 ]', ' ', 'g')`;
 
@@ -561,7 +583,12 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
     -- for another's.
     with candidate as (
       select
-        o.id, o.shop_id, o.product_id, o.title, o.raw_brand, o.url, o.image_url,
+        o.id, o.shop_id, o.product_id, o.title, o.raw_brand, o.url,
+        -- Our stored copy when there is one, the shop's URL when there is not.
+        -- Coalesced here rather than in the app so every reader gets it: a card that
+        -- hotlinks is a request on a retailer's server per page view, and for Djak, whose
+        -- images are served only to its own pages, it is a broken image.
+        coalesce(${cachedImageUrl}, o.image_url) as image_url,
         o.price_minor, o.original_price_minor, o.currency, o.first_seen_at,
         s.slug as shop_slug, s.name as shop_name, s.logo_url as shop_logo,
         -- Matched offers collapse onto their product; unmatched ones stay their own

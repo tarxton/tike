@@ -8,6 +8,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "match": "tsx --env-file=../../.env.local src/match.ts",
+    "images": "tsx --env-file=../../.env.local src/images.ts",
+    "images:ci": "tsx src/images.ts",
     "list-shops": "tsx --env-file=../../.env.local src/list-shops.ts",
     "list-shops:ci": "tsx src/list-shops.ts",
     "check-env": "tsx --env-file=../../.env.local src/check-env.ts",
@@ -20,7 +22,9 @@
     "@tike/core": "workspace:*",
     "@tike/crawler": "workspace:*",
     "@tike/db": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "aws4fetch": "^1.0.20",
+    "drizzle-orm": "^0.45.2",
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
