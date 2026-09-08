@@ -87,13 +87,15 @@ export default async function Results({
   ]);
 
   const selectedBrands = new Set(brands.map((b) => b.toLowerCase()));
-  // Every brand chip worth showing: the top of the facet list, plus any brand the user
-  // has already picked. A selected chip that falls outside the cut — or whose count drops
-  // to zero under the other filters — must still render, or the filter cannot be switched
+  // Every brand in the catalogue, not a top-twelve cut. The cut hid 36 of 48 brands —
+  // Salomon, Vans, Hoka, Timberland among them — so 17% of the catalogue was reachable
+  // by search but not by the filter that claimed to list the brands.
+  //
+  // A selected brand whose count drops to zero under the other filters disappears from
+  // the facet list entirely, so it is appended here or the filter could not be switched
   // off except by editing the URL.
   const brandChips = [
-    ...brandFacets.slice(0, 12),
-    ...brandFacets.slice(12).filter((b) => selectedBrands.has(b.brand.toLowerCase())),
+    ...brandFacets,
     ...brands
       .filter((b) => !brandFacets.some((f) => f.brand.toLowerCase() === b.toLowerCase()))
       .map((brand) => ({ brand, count: 0 })),
@@ -291,7 +293,7 @@ export default async function Results({
             })}
             active={selectedBrands.has(b.brand.toLowerCase())}
           >
-            {b.brand} <span className="text-neutral-400 tabular-nums">{b.count}</span>
+            {b.brand}
           </FilterChip>
         ))}
       </nav>
