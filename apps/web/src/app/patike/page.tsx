@@ -1,6 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { availableBrands, availableShops, availableSizes, isSortKey, searchOffers } from '@tike/db';
+import {
+  availableBrands,
+  availableShops,
+  availableSizes,
+  isSortKey,
+  modelByKey,
+  searchOffers,
+} from '@tike/db';
 import { Filters } from '@/components/filters';
 import { OfferCard } from '@/components/offer-card';
 import { Pager } from '@/components/pager';
@@ -37,6 +44,7 @@ export default async function Results({
   const urlSizes = parseSizes(first('velicina'));
   const selected = urlSizes.length > 0 ? urlSizes : await getSizes();
   const brands = parseList(first('brend'));
+  const modelKey = first('model');
   const query = first('q');
   const showKids = first('djecije') === '1';
   const page = parsePage(first('strana'));
@@ -50,10 +58,11 @@ export default async function Results({
     (GENDERS as readonly { value: string }[]).some((x) => x.value === g),
   );
 
-  const [results, sizes, brandFacets, allShops] = await Promise.all([
+  const [results, sizes, brandFacets, allShops, activeModel] = await Promise.all([
     searchOffers({
       sizesEu: selected,
       brands,
+      modelKey,
       query,
       includeKids: showKids,
       onSale,
@@ -64,8 +73,17 @@ export default async function Results({
       offset: (page - 1) * PAGE_SIZE,
     }),
     availableSizes(),
-    availableBrands({ sizesEu: selected, query, includeKids: showKids, onSale, shops, genders }),
+    availableBrands({
+      sizesEu: selected,
+      modelKey,
+      query,
+      includeKids: showKids,
+      onSale,
+      shops,
+      genders,
+    }),
     availableShops(),
+    modelByKey(modelKey),
   ]);
 
   const selectedBrands = new Set(brands.map((b) => b.toLowerCase()));
@@ -90,6 +108,7 @@ export default async function Results({
   const hasFilters =
     selected.length > 0 ||
     brands.length > 0 ||
+    Boolean(modelKey) ||
     Boolean(query) ||
     onSale ||
     shops.length > 0 ||
@@ -131,6 +150,7 @@ export default async function Results({
           kidsHref={buildHref({
             sizes: selected,
             brands,
+            model: modelKey,
             query,
             kids: !showKids,
             sort,
@@ -144,6 +164,35 @@ export default async function Results({
         />
       </section>
 
+      {/*
+       * A picked model is a filter like any other, so it says what it is and offers a
+       * way out. Without this the grid silently holds one model and the only escape is
+       * editing the URL — the same trap the brand chips had.
+       */}
+      {activeModel ? (
+        <p className="mb-4 text-sm text-neutral-600">
+          {t.model}{' '}
+          <strong className="text-neutral-900">
+            {[activeModel.brand, activeModel.model].filter(Boolean).join(' ')}
+          </strong>{' '}
+          <Link
+            href={buildHref({
+              sizes: selected,
+              brands,
+              query,
+              kids: showKids,
+              sort,
+              onSale,
+              shops,
+              genders,
+            })}
+            className="ml-1 underline underline-offset-4 hover:text-neutral-900"
+          >
+            {t.clearModel}
+          </Link>
+        </p>
+      ) : null}
+
       {query ? (
         <p className="mb-4 text-sm text-neutral-600">
           {t.resultsFor} <strong className="text-neutral-900">“{query}”</strong>{' '}
@@ -151,6 +200,7 @@ export default async function Results({
             href={buildHref({
               sizes: selected,
               brands,
+              model: modelKey,
               kids: showKids,
               sort,
               onSale,
@@ -175,6 +225,7 @@ export default async function Results({
               buildHref({
                 sizes: selected,
                 brands,
+                model: modelKey,
                 query,
                 kids: showKids,
                 sort: next,
@@ -196,6 +247,7 @@ export default async function Results({
           buildHref({
             sizes: selected,
             brands,
+            model: modelKey,
             query,
             kids: showKids,
             sort,
@@ -211,6 +263,7 @@ export default async function Results({
           href={buildHref({
             sizes: selected,
             brands: [],
+            model: modelKey,
             query,
             kids: showKids,
             sort,
@@ -228,6 +281,7 @@ export default async function Results({
             href={buildHref({
               sizes: selected,
               brands: toggleBrand(b.brand),
+              model: modelKey,
               query,
               kids: showKids,
               sort,
@@ -249,6 +303,7 @@ export default async function Results({
             href={buildHref({
               sizes: selected,
               brands,
+              model: modelKey,
               query,
               kids: showKids,
               sort,
@@ -296,6 +351,7 @@ export default async function Results({
               buildHref({
                 sizes: selected,
                 brands,
+                model: modelKey,
                 query,
                 kids: showKids,
                 sort,
@@ -337,6 +393,7 @@ function parsePage(raw: string | undefined): number {
 function buildHref({
   sizes,
   brands,
+  model,
   query,
   kids,
   page,
@@ -347,6 +404,7 @@ function buildHref({
 }: {
   sizes: number[];
   brands?: string[];
+  model?: string;
   query?: string;
   kids?: boolean;
   page?: number;
@@ -358,6 +416,7 @@ function buildHref({
   const sp = new URLSearchParams();
   if (sizes.length > 0) sp.set('velicina', sizes.join(','));
   if (brands && brands.length > 0) sp.set('brend', brands.join(','));
+  if (model) sp.set('model', model);
   if (query) sp.set('q', query);
   if (kids) sp.set('djecije', '1');
   // Page one is the bare URL: a filter change should never land on page 7 of nothing.

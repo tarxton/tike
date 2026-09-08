@@ -23,6 +23,8 @@ export const t = {
   clearSearch: 'poništi pretragu',
   brand: 'Brend',
   allBrands: 'Svi brendovi',
+  model: 'Model',
+  clearModel: 'prikaži sve',
 
   onSale: 'Na sniženju',
   genderMen: 'Muške',
@@ -89,6 +91,20 @@ export function pluralShops(count: number): string {
   if (last === 1 && lastTwo !== 11) return 'prodavnica';
   if (last >= 2 && last <= 4 && !(lastTwo >= 12 && lastTwo <= 14)) return 'prodavnice';
   return 'prodavnica';
+}
+
+/**
+ * BCS plural for "boja", the colourway count in the model dropdown.
+ *
+ * Same shape as prodavnica: 1 boja, 2-4 boje, 5+ boja, and 11-14 take the many-form
+ * despite their last digit.
+ */
+export function pluralColours(count: number): string {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  if (last === 1 && lastTwo !== 11) return 'boja';
+  if (last >= 2 && last <= 4 && !(lastTwo >= 12 && lastTwo <= 14)) return 'boje';
+  return 'boja';
 }
 
 /** "Prikazano 49-96 od 1.207." — which slice of the whole set is on screen. */

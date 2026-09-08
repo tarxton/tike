@@ -96,6 +96,13 @@ export interface SearchParams {
    * cheaper result in their head.
    */
   brands?: string[];
+  /**
+   * One model family, as picked from the dropdown. See `familyKey`.
+   *
+   * Narrows to every colourway of that model — the colour picker a shopper needs after
+   * naming the shoe. Only matched offers can carry a family, which is all of them.
+   */
+  modelKey?: string;
   query?: string;
   /**
    * Include listings that only come in children's sizes.
@@ -169,6 +176,137 @@ function titleFilter(query: string | undefined) {
     ),
     sql` `,
   );
+}
+
+/**
+ * A model family, as a URL-safe key: "nike-air-force-1-07".
+ *
+ * `product` is one colourway, not one model — 7,235 products against 7,846 in-stock
+ * offers — so a suggestion list built on products would offer "AIR FORCE 1 '07" as
+ * twenty-four separate rows. Families group them.
+ *
+ * The key folds punctuation away because shops do not agree on it: one Nike splits into
+ * three families on the apostrophe alone (`'07`, `‘07`, `’07`), and Asics splits on `®`,
+ * `™` and a non-breaking hyphen. Folding merged 2,899 raw pairs into 2,851 real ones.
+ *
+ * Defined once and used both to generate keys and to filter by them, so a key the
+ * dropdown emits always matches the rows the results page then selects. Expects `p`
+ * (product) and `b` (brand) in scope.
+ */
+const familyKey = sql`btrim(regexp_replace(unaccent(lower(coalesce(b.name, '') || ' ' || p.model)), '[^a-z0-9]+', '-', 'g'), '-')`;
+
+/** The same text with spaces kept, for trigram scoring. */
+const familyText = sql`btrim(regexp_replace(unaccent(lower(coalesce(b.name, '') || ' ' || p.model)), '[^a-z0-9]+', ' ', 'g'))`;
+
+/** And with everything stripped, for punctuation-proof token matching. */
+const foldedFamily = sql`regexp_replace(unaccent(lower(coalesce(b.name, '') || ' ' || p.model)), '[^a-z0-9]', '', 'g')`;
+
+/** One row of the model dropdown. */
+export interface ModelSuggestion {
+  /** Stable id for `?model=`, produced by the same SQL that filters on it. */
+  key: string;
+  brand: string | null;
+  /** The cleanest spelling in the family — the one carrying fewest symbols. */
+  model: string;
+  /** How many colourways sit behind this row. */
+  colourways: number;
+  /**
+   * Where picking this row goes when it holds exactly one colourway.
+   *
+   * Half of all families do, and sending those straight to the product page is the
+   * whole point of the feature: you picked the shoe, so show its prices. A family with
+   * several colourways has no single page to land on and goes to filtered results.
+   */
+  slug: string | null;
+  /** Shops carrying any colourway in the family, for a "u N prodavnica" hint. */
+  shopCount: number;
+}
+
+/**
+ * Models matching what the user has typed so far, best first.
+ *
+ * Deliberately ignores the size filter. The dropdown answers "which shoe do you mean",
+ * the size filter answers "which of these can I buy" — and hiding a model because it is
+ * not in stock in your size today is a false negative, since stock is hours old and the
+ * product page can say honestly which shops have your size and which do not.
+ */
+export async function modelSuggestions(
+  query: string | undefined,
+  limit = 8,
+): Promise<ModelSuggestion[]> {
+  const tokens = (query ?? '').trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return [];
+
+  const normalized = tokens.join(' ');
+  const rows = await db().execute(sql`
+    select
+      ${familyKey}                                              as "key",
+      min(b.name)                                               as "brand",
+      -- Within a family the spellings differ only in punctuation and trademark symbols,
+      -- so the shortest is the cleanest: "GEL-KAYANO 32" over "gel‑kayano™ 32".
+      (array_agg(p.model order by length(p.model), p.model))[1] as "model",
+      count(distinct p.id)::int                                 as "colourways",
+      min(p.slug)                                               as "slug",
+      count(distinct o.shop_id)::int                            as "shop_count",
+      max(similarity(${familyText}, ${normalized}))             as "score"
+    from product p
+    left join brand b on b.id = p.brand_id
+    join offer o on o.product_id = p.id and o.in_stock
+    join shop s on s.id = o.shop_id and s.active
+    where p.model <> ''
+      ${sql.join(
+        tokens.map(
+          (t) =>
+            sql`and ${foldedFamily} like '%' || regexp_replace(unaccent(lower(${t})), '[^a-z0-9]', '', 'g') || '%'`,
+        ),
+        sql` `,
+      )}
+    group by ${familyKey}
+    -- Score first, then the bigger family: with two equally good matches, the model
+    -- carrying more colourways is the one more people mean.
+    order by "score" desc, "colourways" desc, "model" asc
+    limit ${limit}
+  `);
+
+  return (rows.rows as Record<string, unknown>[]).map((r) => ({
+    key: String(r.key),
+    brand: r.brand === null ? null : String(r.brand),
+    model: String(r.model),
+    colourways: Number(r.colourways),
+    // Only a single-colourway family can be sent to a product page; for the rest the
+    // slug is one arbitrary member of the group and would be a wrong destination.
+    slug: Number(r.colourways) === 1 && r.slug !== null ? String(r.slug) : null,
+    shopCount: Number(r.shop_count),
+  }));
+}
+
+/**
+ * The name behind a `?model=` key, for showing what is filtered and offering to clear it.
+ *
+ * Resolved rather than carried in the URL: a label in the query string is one the user
+ * can edit, and a results page insisting it is showing "Air Force 1" when it is not
+ * would be worse than no label at all.
+ */
+export async function modelByKey(
+  key: string | undefined,
+): Promise<{ brand: string | null; model: string } | null> {
+  if (!key) return null;
+  const rows = await db().execute(sql`
+    select
+      min(b.name)                                               as "brand",
+      (array_agg(p.model order by length(p.model), p.model))[1] as "model"
+    from product p
+    left join brand b on b.id = p.brand_id
+    where ${familyKey} = ${key}
+    group by ${familyKey}
+    limit 1
+  `);
+  const first = (rows.rows as Record<string, unknown>[])[0];
+  if (!first) return null;
+  return {
+    brand: first.brand === null ? null : String(first.brand),
+    model: String(first.model),
+  };
 }
 
 /**
@@ -254,6 +392,22 @@ function brandFilter(brands: string[] | undefined) {
 }
 
 /**
+ * Narrow to one model family.
+ *
+ * Matched through `product` rather than the offer title, because the family is a
+ * property of the canonical shoe: two shops title the same model differently, and
+ * matching on their words would drop whichever one phrased it unusually.
+ */
+function modelFilter(modelKey: string | undefined) {
+  if (!modelKey) return sql``;
+  return sql`and o.product_id in (
+    select p.id from product p
+    left join brand b on b.id = p.brand_id
+    where ${familyKey} = ${modelKey}
+  )`;
+}
+
+/**
  * `o.gender in (...)`, and always the unlabelled ones too.
  *
  * Excluding nulls would quietly hide a third of the catalogue behind a filter that
@@ -293,6 +447,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
   const {
     sizesEu,
     brands,
+    modelKey,
     query,
     includeKids,
     onSale,
@@ -333,6 +488,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
         ${shopFilter(shops)}
         ${genderFilter(genders)}
         ${brandFilter(brands)}
+        ${modelFilter(modelKey)}
         ${titleFilter(query)}
     ),
     grouped as (
@@ -490,6 +646,7 @@ export async function availableSizes(): Promise<number[]> {
 export async function availableBrands(
   params: {
     sizesEu?: number[];
+    modelKey?: string;
     query?: string;
     includeKids?: boolean;
     onSale?: boolean;
@@ -497,7 +654,7 @@ export async function availableBrands(
     genders?: string[];
   } = {},
 ): Promise<{ brand: string; count: number }[]> {
-  const { sizesEu, query, includeKids, onSale, shops, genders } = params;
+  const { sizesEu, modelKey, query, includeKids, onSale, shops, genders } = params;
   const wantsKids =
     includeKids ||
     (sizesEu ?? []).some((s) => s < ADULT_MIN_SIZE) ||
@@ -517,6 +674,7 @@ export async function availableBrands(
       ${saleFilter(onSale)}
       ${shopFilter(shops)}
       ${genderFilter(genders)}
+      ${modelFilter(modelKey)}
       ${titleFilter(query)}
     group by o.raw_brand
     order by 2 desc, o.raw_brand asc

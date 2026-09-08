@@ -7,6 +7,8 @@ export {
   availableBrands,
   availableShops,
   productBySlug,
+  modelSuggestions,
+  modelByKey,
   isSortKey,
   SORT_KEYS,
   type SearchResult,
@@ -15,4 +17,5 @@ export {
   type SortKey,
   type ProductDetail,
   type ProductOffer,
+  type ModelSuggestion,
 } from './queries';

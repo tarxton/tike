@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ModelSearch } from './model-search';
 import { formatSize, t } from '@/lib/messages';
 import { applyFilters, clearFilters } from '@/lib/size';
 import { ADULT_MIN_SIZE } from '@/lib/sizes';
@@ -48,14 +49,7 @@ export function Filters({
       {brands.length > 0 ? <input type="hidden" name="brend" value={brands.join(',')} /> : null}
       <input type="hidden" name="returnTo" value={returnTo} />
 
-      <input
-        type="search"
-        name="q"
-        defaultValue={query ?? ''}
-        placeholder={t.searchPlaceholder}
-        aria-label={t.search}
-        className="w-full max-w-xl rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus-visible:border-neutral-900 focus-visible:ring-2 focus-visible:ring-neutral-900/10 focus-visible:outline-none"
-      />
+      <ModelSearch defaultValue={query} />
 
       <fieldset>
         <legend className="mb-2 text-sm font-medium text-neutral-700">{t.chooseSize}</legend>
