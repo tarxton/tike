@@ -75,7 +75,11 @@ export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: 
   const hasSpread = offer.maxPriceMinor > offer.priceMinor;
 
   return (
-    <article className="group flex flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white transition hover:border-neutral-400">
+    // `h-full` so a card fills its grid cell: shoes stock different numbers of sizes, and
+    // without it the chip rows set each card's height individually and a row of cards ends
+    // ragged. Most visible on the product page's colourway shelf, where two cards sit side
+    // by side and the difference has nothing to hide behind.
+    <article className="group flex h-full flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white transition hover:border-neutral-400">
       <CardLink offer={offer} sizes={sizes}>
         <div className="aspect-square overflow-hidden bg-neutral-50">
           {offer.imageUrl ? (

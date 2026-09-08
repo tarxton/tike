@@ -56,6 +56,7 @@ export const t = {
   backToFirstPage: 'Nazad na prvu stranicu',
 
   backToSearch: 'Nazad na pretragu',
+  otherColourways: 'Druge boje ovog modela',
   atShops: 'Cijene po prodavnicama',
   cheapest: 'najjeftinije',
   yourSize: 'tvoj broj',
@@ -106,6 +107,17 @@ export function pluralColours(count: number): string {
   if (last === 1 && lastTwo !== 11) return 'boja';
   if (last >= 2 && last <= 4 && !(lastTwo >= 12 && lastTwo <= 14)) return 'boje';
   return 'boja';
+}
+
+/**
+ * "Prikaži sve 4 boje" / "Prikaži svih 12 boja" — the link out of the colourway shelf.
+ *
+ * The determiner has to agree with the noun's case, which the count decides: 2-4 take
+ * the accusative ("sve 4 boje"), 5 and up the genitive ("svih 12 boja").
+ */
+export function seeAllColourways(count: number): string {
+  const noun = pluralColours(count);
+  return `Prikaži ${noun === 'boje' ? 'sve' : 'svih'} ${formatCount(count)} ${noun}`;
 }
 
 /** "Prikazano 49-96 od 1.207." — which slice of the whole set is on screen. */

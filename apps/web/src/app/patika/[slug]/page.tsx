@@ -2,10 +2,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { productBySlug, type ProductOffer } from '@tike/db';
-import { formatPrice, formatSize, pluralShops, t } from '@/lib/messages';
+import { productBySlug, searchOffers, type ProductOffer } from '@tike/db';
+import { formatPrice, formatSize, pluralShops, seeAllColourways, t } from '@/lib/messages';
 import { getSizes } from '@/lib/size';
+import { OfferCard } from '@/components/offer-card';
 import { ShopLogo } from '@/components/shop-logo';
+
+/** Enough to show the model comes in other colours without becoming a second grid. */
+const RELATED_LIMIT = 3;
 
 export const dynamic = 'force-dynamic';
 
@@ -68,6 +72,27 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   const back = backHref(requestHeaders.get('referer'));
 
+  /*
+   * Other colourways of the same shoe, in the sizes the visitor wears.
+   *
+   * Runs through the same search query the grid uses, so these are the same cards with
+   * the same prices, shop counts and discounts — a colourway is not a different kind of
+   * thing from a search result, and rendering it differently would only invite the two
+   * to drift.
+   *
+   * Children's models are included explicitly: the default hides them so an unfiltered
+   * search does not become a wall of cheap kids' shoes, but here the family is already
+   * one model, and a child's shoe would otherwise show no siblings at all.
+   */
+  const related = await searchOffers({
+    modelKey: product.familyKey,
+    excludeProductId: product.id,
+    sizesEu: selected,
+    includeKids: true,
+    sort: 'najjeftinije',
+    limit: RELATED_LIMIT,
+  });
+
   const name = [product.brand, product.model].filter(Boolean).join(' ');
   const cheapest = product.offers[0];
   const dearest = product.offers[product.offers.length - 1];
@@ -75,15 +100,22 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   return (
     <main className="mx-auto max-w-4xl px-5 py-8">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <Link href="/" className="text-xl font-semibold tracking-tight text-neutral-900">
-          {t.siteName}
-        </Link>
+      <header className="mb-6 flex items-center gap-2">
+        {/*
+         * Arrow first, then the wordmark: an arrow alone only reads as "back" when it
+         * sits where back lives. The label survives for screen readers, and the box is
+         * 44px so it is a real target on a phone rather than a 20px glyph.
+         */}
         <Link
           href={back}
-          className="inline-flex items-center gap-1.5 text-sm text-neutral-600 underline-offset-4 hover:text-neutral-900 hover:underline"
+          aria-label={t.backToSearch}
+          title={t.backToSearch}
+          className="-ml-2 inline-flex h-11 w-11 items-center justify-center rounded-lg text-2xl leading-none text-neutral-700 transition hover:bg-neutral-100 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-neutral-900/10 focus-visible:outline-none"
         >
-          <span aria-hidden="true">←</span> {t.backToSearch}
+          <span aria-hidden="true">←</span>
+        </Link>
+        <Link href="/" className="text-xl font-semibold tracking-tight text-neutral-900">
+          {t.siteName}
         </Link>
       </header>
 
@@ -162,6 +194,33 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             {product.offers.map((offer, i) => (
               <li key={offer.offerId}>
                 <ShopRow offer={offer} selected={selected} cheapest={i === 0 && spread > 0} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {related.items.length > 0 ? (
+        <section className="mt-12">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-medium text-neutral-700">{t.otherColourways}</h2>
+            {/*
+             * Only worth a link when there is more behind the shelf than on it. The count
+             * is the honest one — every colourway matching the same size filter.
+             */}
+            {related.total > related.items.length ? (
+              <Link
+                href={`/patike?model=${encodeURIComponent(product.familyKey)}`}
+                className="text-sm text-neutral-600 underline underline-offset-4 hover:text-neutral-900"
+              >
+                {seeAllColourways(related.total)}
+              </Link>
+            ) : null}
+          </div>
+          <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            {related.items.map((offer) => (
+              <li key={offer.offerId}>
+                <OfferCard offer={offer} sizes={selected} />
               </li>
             ))}
           </ul>

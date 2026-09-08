@@ -103,6 +103,13 @@ export interface SearchParams {
    * naming the shoe. Only matched offers can carry a family, which is all of them.
    */
   modelKey?: string;
+  /**
+   * One product to leave out — the shoe whose page is asking.
+   *
+   * Without it a product page's "other colourways" shelf would lead with the colourway
+   * already filling the screen above it.
+   */
+  excludeProductId?: number;
   query?: string;
   /**
    * Include listings that only come in children's sizes.
@@ -448,6 +455,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
     sizesEu,
     brands,
     modelKey,
+    excludeProductId,
     query,
     includeKids,
     onSale,
@@ -489,6 +497,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
         ${genderFilter(genders)}
         ${brandFilter(brands)}
         ${modelFilter(modelKey)}
+        ${excludeProductId === undefined ? sql`` : sql`and (o.product_id is null or o.product_id <> ${excludeProductId})`}
         ${titleFilter(query)}
     ),
     grouped as (
@@ -710,6 +719,8 @@ export interface ProductDetail {
   styleCode: string | null;
   gender: string | null;
   heroImageUrl: string | null;
+  /** This shoe's model family, for finding its other colourways. See `familyKey`. */
+  familyKey: string;
   /** Cheapest first — the order the page presents them in. */
   offers: ProductOffer[];
 }
@@ -731,7 +742,8 @@ export async function productBySlug(slug: string): Promise<ProductDetail | null>
       b.name            as "brand",
       p.style_code      as "styleCode",
       p.gender::text    as "gender",
-      p.hero_image_url  as "heroImageUrl"
+      p.hero_image_url  as "heroImageUrl",
+      ${familyKey}      as "familyKey"
     from product p
     left join brand b on b.id = p.brand_id
     where p.slug = ${slug}
@@ -797,6 +809,7 @@ export async function productBySlug(slug: string): Promise<ProductDetail | null>
     styleCode: head.styleCode === null ? null : String(head.styleCode),
     gender: head.gender === null ? null : String(head.gender),
     heroImageUrl: head.heroImageUrl === null ? null : String(head.heroImageUrl),
+    familyKey: String(head.familyKey),
     offers,
   };
 }
