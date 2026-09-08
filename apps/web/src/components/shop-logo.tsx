@@ -13,11 +13,19 @@ export function ShopLogo({
   name,
   logoUrl,
   size = 'md',
+  labelled = false,
 }: {
   name: string;
   logoUrl: string | null;
   /** `sm` for the dense result cards, `md` for a product page row. */
   size?: 'sm' | 'md';
+  /**
+   * The shop's name is already written next to this mark.
+   *
+   * Then the mark carries no information of its own: its alt text would make a screen
+   * reader say the name twice, and the text fallback would print it twice on screen.
+   */
+  labelled?: boolean;
 }) {
   // Height fixed, width free.
   //
@@ -28,6 +36,8 @@ export function ShopLogo({
   const box = size === 'sm' ? 'h-4 max-w-16' : 'h-7 max-w-24';
 
   if (!logoUrl) {
+    // Nothing to draw: the name beside it is already the whole message.
+    if (labelled) return null;
     return (
       <span
         className={`inline-flex ${box} items-center truncate text-[11px] font-medium text-neutral-600`}
@@ -42,8 +52,9 @@ export function ShopLogo({
     // eslint-disable-next-line @next/next/no-img-element -- static asset, no optimizer needed
     <img
       src={logoUrl}
-      // The alt text carries the shop's name, which is the information the logo conveys.
-      alt={name}
+      // The alt text carries the shop's name, which is the information the logo conveys —
+      // unless the name is already written next to it.
+      alt={labelled ? '' : name}
       loading="lazy"
       className={`${box} w-auto object-contain object-left`}
     />

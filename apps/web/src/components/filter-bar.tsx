@@ -55,14 +55,20 @@ export function FilterBar({
 
         <span className="mx-1 h-4 w-px bg-neutral-200" aria-hidden="true" />
 
+        {/*
+         * Logo and name, not the logo alone. A mark only works as a label for someone who
+         * already recognises it, and these four are small BiH retailers — the filter was
+         * asking people to identify a shop from a 16px monochrome mark before they could
+         * decide whether to use it.
+         */}
         {allShops.map((shop) => (
           <Chip
             key={shop.slug}
             href={hrefFor({ shops: toggle(shops, shop.slug) })}
             active={shops.includes(shop.slug)}
-            title={shop.name}
           >
-            <ShopLogo name={shop.name} logoUrl={shop.logoUrl} size="sm" />
+            <ShopLogo name={shop.name} logoUrl={shop.logoUrl} size="sm" labelled />
+            {shop.name}
           </Chip>
         ))}
       </div>
@@ -80,21 +86,18 @@ export function FilterBar({
 function Chip({
   href,
   active,
-  title,
   children,
 }: {
   href: string;
   active: boolean;
-  title?: string;
   children: React.ReactNode;
 }) {
   return (
     <Link
       href={href}
-      title={title}
       aria-pressed={active}
       className={[
-        'inline-flex items-center rounded-full border px-3 py-1 text-sm transition',
+        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm whitespace-nowrap transition',
         'focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none',
         active
           ? 'border-neutral-900 bg-neutral-900 text-white'
