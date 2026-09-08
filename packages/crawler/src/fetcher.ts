@@ -11,6 +11,16 @@ export type Transport = 'fetch' | 'curl';
 const STATUS_MARKER = '\n__tike_status__';
 
 /**
+ * Statuses worth asking again about: the shop is overloaded or briefly broken, not
+ * refusing. 403 is deliberately absent — that is an answer, not a hiccup — and so is 404,
+ * where asking twice changes nothing.
+ */
+const RETRIABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
+const MAX_RETRIES = 3;
+/** Doubles per attempt: 2s, 4s, 8s. Slower than the crawl delay, on purpose. */
+const RETRY_BASE_MS = 2000;
+
+/**
  * Polite HTTP client.
  *
  * Etiquette is enforced here rather than left to callers, so no crawl path can
@@ -82,25 +92,40 @@ export class PoliteFetcher {
       throw new RobotsDisallowedError(`robots.txt disallows ${url}`);
     }
     const run = this.queue.then(async () => {
-      const wait = this.lastRequestAt + this.minDelayMs - Date.now();
-      if (wait > 0) await sleep(wait);
-      this.lastRequestAt = Date.now();
       // The User-Agent is set last so no caller can quietly replace our identity with a
       // browser's; extra headers exist for endpoints that need one, not for disguise.
       const headers = { ...extraHeaders, 'user-agent': USER_AGENT };
-      const { status, body } =
-        this.transport === 'curl'
-          ? await this.getViaCurl(url, headers)
-          : await this.getViaFetch(url, headers);
 
-      if (status === 403) {
-        throw new ForbiddenError(
-          `403 from ${url}: the shop is refusing an identified crawler. Stop crawling it ` +
-            `and contact the shop instead of working around the block.`,
-        );
+      for (let attempt = 0; ; attempt += 1) {
+        const wait = this.lastRequestAt + this.minDelayMs - Date.now();
+        if (wait > 0) await sleep(wait);
+        this.lastRequestAt = Date.now();
+
+        const { status, body } =
+          this.transport === 'curl'
+            ? await this.getViaCurl(url, headers)
+            : await this.getViaFetch(url, headers);
+
+        if (status === 403) {
+          throw new ForbiddenError(
+            `403 from ${url}: the shop is refusing an identified crawler. Stop crawling it ` +
+              `and contact the shop instead of working around the block.`,
+          );
+        }
+        if (status >= 200 && status < 300) return body;
+
+        // A shop having a bad minute is not a shop refusing us, and it is not a markup
+        // change either. One 502 used to abort a 70-minute crawl outright, losing every
+        // page still unvisited; backing off and asking again is both politer and the only
+        // way a full pass survives a busy hour.
+        if (RETRIABLE.has(status) && attempt < MAX_RETRIES) {
+          const backoff = RETRY_BASE_MS * 2 ** attempt;
+          console.warn(`  ${status} from ${url} — retrying in ${backoff}ms`);
+          await sleep(backoff);
+          continue;
+        }
+        throw new Error(`${status} from ${url}`);
       }
-      if (status < 200 || status >= 300) throw new Error(`${status} from ${url}`);
-      return body;
     });
     this.queue = run.catch(() => undefined);
     return run;
