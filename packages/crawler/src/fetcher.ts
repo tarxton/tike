@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import robotsParser, { type Robot } from 'robots-parser';
+import { FetchError } from './errors';
 
 const execFileAsync = promisify(execFile);
 
@@ -14,8 +15,15 @@ const STATUS_MARKER = '\n__tike_status__';
  * Statuses worth asking again about: the shop is overloaded or briefly broken, not
  * refusing. 403 is deliberately absent — that is an answer, not a hiccup — and so is 404,
  * where asking twice changes nothing.
+ *
+ * Every 5xx rather than a list of them. A hand-picked set missed Cloudflare's own 520-527
+ * range and a 521 killed a full crawl on the very next run; the rule is that a server
+ * error is the server's problem and transient by definition, not that certain numbers are
+ * special.
  */
-const RETRIABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
+function isRetriable(status: number): boolean {
+  return status >= 500 || status === 408 || status === 425 || status === 429;
+}
 const MAX_RETRIES = 3;
 /** Doubles per attempt: 2s, 4s, 8s. Slower than the crawl delay, on purpose. */
 const RETRY_BASE_MS = 2000;
@@ -118,13 +126,13 @@ export class PoliteFetcher {
         // change either. One 502 used to abort a 70-minute crawl outright, losing every
         // page still unvisited; backing off and asking again is both politer and the only
         // way a full pass survives a busy hour.
-        if (RETRIABLE.has(status) && attempt < MAX_RETRIES) {
+        if (isRetriable(status) && attempt < MAX_RETRIES) {
           const backoff = RETRY_BASE_MS * 2 ** attempt;
           console.warn(`  ${status} from ${url} — retrying in ${backoff}ms`);
           await sleep(backoff);
           continue;
         }
-        throw new Error(`${status} from ${url}`);
+        throw new FetchError(`${status} from ${url}`, status, url);
       }
     });
     this.queue = run.catch(() => undefined);

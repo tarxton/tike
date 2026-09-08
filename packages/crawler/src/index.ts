@@ -4,7 +4,7 @@ import { parseOfficeshoes } from './adapters/officeshoes';
 import { parseMagento2 } from './adapters/magento2';
 
 export { parseNbshop } from './adapters/nbshop';
-export { ParseError, UnavailableError } from './errors';
+export { ParseError, UnavailableError, FetchError } from './errors';
 export { parseOfficeshoes } from './adapters/officeshoes';
 export { parseMagento2, extractSlugStyleCode } from './adapters/magento2';
 export { PoliteFetcher, ForbiddenError, RobotsDisallowedError, USER_AGENT } from './fetcher';

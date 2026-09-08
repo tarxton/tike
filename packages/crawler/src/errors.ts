@@ -18,6 +18,28 @@ export class ParseError extends Error {
 }
 
 /**
+ * One URL that could not be fetched after backing off and retrying.
+ *
+ * Separate from both a parse failure and a database error, because it means something
+ * different from either: the shop's markup is not in question and neither is ours. One
+ * page that stays unreachable should cost that page, not the 3,000 still unvisited — a
+ * 521 on a single Skechers listing aborted an entire Djak crawl before this existed.
+ *
+ * Counted rather than ignored: a run where many URLs failed to fetch has not seen the
+ * catalogue, and must not be allowed to conclude that anything has been discontinued.
+ */
+export class FetchError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly url: string,
+  ) {
+    super(message);
+    this.name = 'FetchError';
+  }
+}
+
+/**
  * A product page that was read perfectly and has nothing to sell.
  *
  * Not a parse failure, and the difference is load-bearing. Djak lists every product it

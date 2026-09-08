@@ -14,6 +14,7 @@ import {
   ForbiddenError,
   ParseError,
   UnavailableError,
+  FetchError,
   PoliteFetcher,
   XHR_HEADERS,
   filterByPath,
@@ -36,6 +37,13 @@ import { crawlRun, offer, offerSize, pricePoint, shop, withDb } from '@tike/db';
 const PARSE_FAILURE_THRESHOLD = 0.05;
 /** Below this many pages the ratio is meaningless, so the breaker stays out of the way. */
 const MIN_PAGES_FOR_THRESHOLD = 20;
+
+/**
+ * How much of a catalogue can go unreachable before a run loses the right to retire
+ * anything. Deliberately looser than the parse budget: a handful of pages timing out is
+ * ordinary, whereas markup that will not parse is never ordinary.
+ */
+const UNREACHABLE_RETIREMENT_THRESHOLD = 0.1;
 
 /**
  * How many consecutive successful runs an offer may go unseen before it is treated as
@@ -193,6 +201,8 @@ await withDb(async (db) => {
   let changed = 0;
   /** Read fine, nothing to sell. Reported, but kept out of the failure budget. */
   let unavailable = 0;
+  /** Never fetched, after retries. Not the shop's markup and not ours. */
+  const unreachable: { url: string; reason: string }[] = [];
 
   for (const [i, url] of urls.entries()) {
     if (!fetcher.isAllowed(url)) {
@@ -292,6 +302,14 @@ await withDb(async (db) => {
         unavailable += 1;
         continue;
       }
+      // One unreachable page costs that page, not the thousands still unvisited. Counted,
+      // because a run that could not fetch much of the catalogue has not seen it, and must
+      // not be trusted to decide what the shop no longer sells.
+      if (err instanceof FetchError) {
+        unreachable.push({ url, reason: err.message.slice(0, 200) });
+        console.warn(`  unreachable: ${url} — ${err.message.slice(0, 120)}`);
+        continue;
+      }
       // Only bad *data* counts toward the failure budget. A database or network error
       // is a bug or an outage, not a shop changing its markup, and hiding it in the
       // parse-failure count would let the circuit breaker measure the wrong thing.
@@ -326,7 +344,8 @@ await withDb(async (db) => {
 
   console.log(
     `\nrun ${runId}: parsed=${parsed} failed=${failures.length} written=${changed} ` +
-      `sold-out=${unavailable} failure-rate=${(failureRate * 100).toFixed(1)}%`,
+      `sold-out=${unavailable} unreachable=${unreachable.length} ` +
+      `failure-rate=${(failureRate * 100).toFixed(1)}%`,
   );
 
   if (breakerTripped) {
@@ -344,6 +363,21 @@ await withDb(async (db) => {
   // empty the shop.
   if (dryRun || Number.isFinite(limit)) {
     console.log('partial run: skipping staleness retirement');
+    return;
+  }
+
+  // A run that could not reach much of the catalogue has not seen it, and a page unseen
+  // for the wrong reason must not be read as a product withdrawn. The same logic as the
+  // parse breaker, against a different failure: there, the markup changed; here, the shop
+  // was unreachable, and both end with tike concluding a shop stopped selling things it
+  // still sells.
+  const unreachableRate = urls.length === 0 ? 0 : unreachable.length / urls.length;
+  if (unreachableRate > UNREACHABLE_RETIREMENT_THRESHOLD) {
+    console.warn(
+      `${(unreachableRate * 100).toFixed(1)}% of urls were unreachable: ` +
+        `skipping staleness retirement, since this run cannot say what is still sold`,
+    );
+    for (const u of unreachable.slice(0, 5)) console.warn(`  ${u.url}: ${u.reason}`);
     return;
   }
 
