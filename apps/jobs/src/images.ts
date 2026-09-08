@@ -26,7 +26,14 @@ import { putObject, r2Client, readR2Config, R2NotConfiguredError } from './r2';
 /** Wide enough for a card at 2x on a phone, which is the largest place one is shown. */
 const WIDTH = 640;
 const QUALITY = 80;
-const DEFAULT_LIMIT = 500;
+/**
+ * Everything outstanding, unless asked otherwise.
+ *
+ * A cap made every run stop at 500 and need twenty invocations to get through the
+ * catalogue once. The job is resumable and rate-limited per shop, so the honest default
+ * is "finish"; `--limit` stays for smoke tests.
+ */
+const DEFAULT_LIMIT = Number.MAX_SAFE_INTEGER;
 
 /**
  * Object key: a hash of the source URL, under the shop that published it.
