@@ -195,6 +195,7 @@ export default async function Results({
               shops,
               genders,
             })}
+            scroll={false}
             className="ml-1 underline underline-offset-4 hover:text-neutral-900"
           >
             {t.clearModel}
@@ -216,6 +217,7 @@ export default async function Results({
               shops,
               genders,
             })}
+            scroll={false}
             className="ml-1 underline underline-offset-4 hover:text-neutral-900"
           >
             {t.clearSearch}
@@ -500,6 +502,8 @@ function FilterChip({
   return (
     <Link
       href={href}
+      // Stay where the reader is; see the note on the filter-bar chip.
+      scroll={false}
       className={[
         // A brand name never breaks across lines: "Sergio Tacchini" wrapping turns one
         // chip into a three-line lozenge and, with the row stretching to match, drags

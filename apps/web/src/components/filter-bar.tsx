@@ -95,6 +95,10 @@ function Chip({
   return (
     <Link
       href={href}
+      // Changing a filter must not throw the reader back to the top of the page. On a
+      // phone the chips sit a screen and a half down, so the default scroll-to-top meant
+      // every refinement cost a scroll back to where you already were.
+      scroll={false}
       aria-pressed={active}
       className={[
         'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm whitespace-nowrap transition',

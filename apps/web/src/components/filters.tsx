@@ -98,6 +98,7 @@ export function Filters({
         {kidsCount > 0 ? (
           <Link
             href={kidsHref}
+            scroll={false}
             className="text-sm text-neutral-600 underline underline-offset-4 hover:text-neutral-900"
           >
             {showKids ? t.hideKids : `${t.showKids} (${kidsCount})`}

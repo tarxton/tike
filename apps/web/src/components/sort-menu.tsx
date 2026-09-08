@@ -64,6 +64,8 @@ export function SortMenu({
             <Link
               key={o.key ?? 'relevance'}
               href={hrefFor(o.key)}
+              // Reordering the same results is not a reason to move the reader.
+              scroll={false}
               aria-current={active ? 'true' : undefined}
               className={[
                 'block rounded-md px-3 py-2 text-sm',
