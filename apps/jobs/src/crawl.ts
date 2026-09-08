@@ -57,14 +57,26 @@ if (!shopSlug) {
 
 /** The polite path: one request, and the list the shop publishes for crawlers. */
 async function discoverFromSitemap(fetcher: PoliteFetcher, sitemapUrl: string): Promise<string[]> {
-  let xml = await fetcher.get(sitemapUrl);
-  if (isSitemapIndex(xml)) {
-    const productSitemap = selectProductSitemap(parseSitemapLocs(xml));
-    if (!productSitemap) throw new Error('sitemap index contains no product.xml');
+  const xml = await fetcher.get(sitemapUrl);
+  if (!isSitemapIndex(xml)) return parseSitemapLocs(xml);
+
+  const children = parseSitemapLocs(xml);
+  const productSitemap = selectProductSitemap(children);
+  if (productSitemap) {
     console.log(`sitemap index -> ${productSitemap}`);
-    xml = await fetcher.get(productSitemap);
+    return parseSitemapLocs(await fetcher.get(productSitemap));
   }
-  return parseSitemapLocs(xml);
+
+  // No sitemap names itself for products, so read them all and let the shop's path
+  // filter decide. Magento numbers its children — sitemap-1-1.xml, -1-2, -1-3 — with
+  // products spread across more than one, so picking a single "product" file finds
+  // nothing and picking the first would silently drop most of the catalogue.
+  console.log(`sitemap index -> ${children.length} child sitemaps, reading all`);
+  const urls: string[] = [];
+  for (const child of children) {
+    urls.push(...parseSitemapLocs(await fetcher.get(child)));
+  }
+  return urls;
 }
 
 /**
@@ -144,11 +156,11 @@ await withDb(async (db) => {
     throw new Error(`shop "${shopSlug}" has no sitemap configured`);
   }
 
-  const fetcher = new PoliteFetcher(row.baseUrl, row.minDelayMs);
+  const fetcher = new PoliteFetcher(row.baseUrl, row.minDelayMs, config.transport);
   const { crawlDelayMs, effectiveDelayMs } = await fetcher.init();
   console.log(
-    `shop=${row.slug} platform=${row.platform} robots crawl-delay=${crawlDelayMs}ms ` +
-      `effective delay=${effectiveDelayMs}ms`,
+    `shop=${row.slug} platform=${row.platform} transport=${config.transport} ` +
+      `robots crawl-delay=${crawlDelayMs}ms effective delay=${effectiveDelayMs}ms`,
   );
 
   const discovered =
@@ -291,7 +303,10 @@ await withDb(async (db) => {
   }
 
   const attempted = parsed + failures.length;
-  const failureRate = attempted === 0 ? 1 : failures.length / attempted;
+  // Nothing attempted is no longer evidence of trouble: a slice of Djak's catalogue can
+  // be entirely sold out, and calling that a 100% failure rate reported a broken shop
+  // whose markup parsed perfectly every time.
+  const failureRate = attempted === 0 ? 0 : failures.length / attempted;
   const breakerTripped =
     attempted >= MIN_PAGES_FOR_THRESHOLD && failureRate > PARSE_FAILURE_THRESHOLD;
 

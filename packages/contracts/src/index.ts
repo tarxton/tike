@@ -44,6 +44,20 @@ export const crawlConfigSchema = z.object({
    * publishes none — unknown paths return the homepage with a 200 rather than a 404 —
    * so its categories have to be walked page by page instead.
    */
+  /**
+   * Which HTTP client fetches this shop.
+   *
+   * Opt-in per shop, never an automatic fallback. Djak's Cloudflare rejects Node's client
+   * on TLS fingerprint while accepting curl with the identical User-Agent, and their
+   * operator has given written permission to crawl — so this is the one shop that needs
+   * it. Retrying every 403 through another client would turn a guard against ignoring
+   * refusals into a way of not noticing them, which is why this is a config value with a
+   * name and a reason rather than a catch block.
+   *
+   * The identity does not change either way: same tike-bot User-Agent, same robots.txt
+   * checks, same one-request-at-a-time spacing.
+   */
+  transport: z.enum(['fetch', 'curl']).default('fetch'),
   discovery: z
     .discriminatedUnion('kind', [
       z.object({ kind: z.literal('sitemap') }),

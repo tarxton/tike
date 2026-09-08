@@ -42,6 +42,12 @@ describe('parseMagento2', () => {
   it('reads the audience out of the title', () => {
     expect(parseMagento2(load('01-in-stock.html'), IN_STOCK).gender).toBe('kids');
     expect(parseMagento2(load('03-in-stock.html'), ADIDAS).gender).toBe('women');
+    // Đak is a Serbian group and writes ekavian, so both spellings have to work or a
+    // whole audience reads as unlabelled. Seen live on "…AIR MAX MOTIF ZA DEČAKE".
+    const ekavian = load('01-in-stock.html').replace('JR DJEVOJČICE', 'ZA DEČAKE');
+    expect(parseMagento2(ekavian, IN_STOCK).gender).toBe('kids');
+    const ijekavian = load('01-in-stock.html').replace('JR DJEVOJČICE', 'ZA DJEVOJČICE');
+    expect(parseMagento2(ijekavian, IN_STOCK).gender).toBe('kids');
     // "ZA MUŠKARCE" is the men's phrase; the sold-out fixture carries it but cannot be
     // parsed into an offer, so men's is asserted through the brand-title helper instead.
   });

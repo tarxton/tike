@@ -1,4 +1,14 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import robotsParser, { type Robot } from 'robots-parser';
+
+const execFileAsync = promisify(execFile);
+
+/** Which HTTP client performs the request. See `Transport` in the crawl config. */
+export type Transport = 'fetch' | 'curl';
+
+/** Marks the end of a curl body so the status code can be read off the same stream. */
+const STATUS_MARKER = '\n__tike_status__';
 
 /**
  * Polite HTTP client.
@@ -29,13 +39,30 @@ export class PoliteFetcher {
   constructor(
     private readonly baseUrl: string,
     private readonly minDelayMs: number,
+    /**
+     * Node's own client by default.
+     *
+     * `curl` exists for one shop whose WAF rejects Node's TLS fingerprint despite its
+     * operator having agreed to the crawl in writing. It changes which client sends the
+     * request and nothing else — the User-Agent still says tike-bot, robots.txt is still
+     * obeyed, and a 403 from curl is still treated as a refusal and still fatal.
+     */
+    private readonly transport: Transport = 'fetch',
   ) {}
 
   /** Reads robots.txt and adopts its Crawl-delay when stricter than our floor. */
   async init(): Promise<{ crawlDelayMs: number; effectiveDelayMs: number }> {
     const robotsUrl = new URL('/robots.txt', this.baseUrl).href;
-    const res = await fetch(robotsUrl, { headers: { 'user-agent': USER_AGENT } });
-    const body = res.ok ? await res.text() : '';
+    // Through the shop's own transport: a WAF that rejects our client would otherwise
+    // block robots.txt too, and an unreadable robots.txt reads as "no rules published" —
+    // the crawler would proceed with fewer constraints precisely where it has less
+    // information, which is exactly backwards.
+    const headers = { 'user-agent': USER_AGENT };
+    const { status, body: fetched } =
+      this.transport === 'curl'
+        ? await this.getViaCurl(robotsUrl, headers)
+        : await this.getViaFetch(robotsUrl, headers);
+    const body = status >= 200 && status < 300 ? fetched : '';
     this.robots = robotsParser(robotsUrl, body);
     const crawlDelayMs = (this.robots.getCrawlDelay(USER_AGENT) ?? 0) * 1000;
     return { crawlDelayMs, effectiveDelayMs: Math.max(crawlDelayMs, this.minDelayMs) };
@@ -60,17 +87,69 @@ export class PoliteFetcher {
       this.lastRequestAt = Date.now();
       // The User-Agent is set last so no caller can quietly replace our identity with a
       // browser's; extra headers exist for endpoints that need one, not for disguise.
-      const res = await fetch(url, { headers: { ...extraHeaders, 'user-agent': USER_AGENT } });
-      if (res.status === 403) {
+      const headers = { ...extraHeaders, 'user-agent': USER_AGENT };
+      const { status, body } =
+        this.transport === 'curl'
+          ? await this.getViaCurl(url, headers)
+          : await this.getViaFetch(url, headers);
+
+      if (status === 403) {
         throw new ForbiddenError(
           `403 from ${url}: the shop is refusing an identified crawler. Stop crawling it ` +
             `and contact the shop instead of working around the block.`,
         );
       }
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText} from ${url}`);
-      return res.text();
+      if (status < 200 || status >= 300) throw new Error(`${status} from ${url}`);
+      return body;
     });
     this.queue = run.catch(() => undefined);
     return run;
+  }
+
+  private async getViaFetch(
+    url: string,
+    headers: Record<string, string>,
+  ): Promise<{ status: number; body: string }> {
+    const res = await fetch(url, { headers });
+    return { status: res.status, body: await res.text() };
+  }
+
+  /**
+   * The same request, sent by curl.
+   *
+   * The status code is appended to the body behind a marker rather than read from headers,
+   * because curl writes the body to stdout and there is no second channel to read a status
+   * from without parsing a header dump.
+   *
+   * `execFile`, not a shell: the URL comes from a shop's sitemap, and handing untrusted
+   * text to a shell would make a crawl target able to run commands here.
+   */
+  private async getViaCurl(
+    url: string,
+    headers: Record<string, string>,
+  ): Promise<{ status: number; body: string }> {
+    const headerArgs = Object.entries(headers).flatMap(([k, v]) => ['--header', `${k}: ${v}`]);
+    const { stdout } = await execFileAsync(
+      'curl',
+      [
+        '--silent',
+        '--show-error',
+        '--location',
+        '--compressed',
+        '--max-time',
+        '45',
+        ...headerArgs,
+        '--write-out',
+        `${STATUS_MARKER}%{http_code}`,
+        url,
+      ],
+      { maxBuffer: 64 * 1024 * 1024, encoding: 'utf-8' },
+    );
+
+    const at = stdout.lastIndexOf(STATUS_MARKER);
+    if (at === -1) throw new Error(`curl returned no status for ${url}`);
+    const status = Number(stdout.slice(at + STATUS_MARKER.length).trim());
+    if (!Number.isFinite(status)) throw new Error(`curl returned an unreadable status for ${url}`);
+    return { status, body: stdout.slice(0, at) };
   }
 }

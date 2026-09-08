@@ -111,7 +111,11 @@ function extractBrand(title: string): string | null {
  */
 function extractGender(title: string): Gender | null {
   const t = title.toLowerCase();
-  if (/(dje[cč]a|dje[cč]ij|djevoj[cč]|dje[cč]ak|bebe|\bjr\b|junior)/.test(t)) return 'kids';
+  // Both spellings of every one of these words. Đak is a Serbian group and writes ekavian
+  // — "dečake", "devojčice" — where the other four shops write ijekavian, and a rule built
+  // only on "dječak" read "NIKE PATIKE AIR MAX MOTIF ZA DEČAKE" as having no audience at
+  // all. The optional j is the whole difference.
+  if (/(\bd[j]?e[cč](a|ij|ak|k)|d[j]?evoj[cč]|bebe|\bjr\b|junior)/.test(t)) return 'kids';
   if (/(za\s+[zž]ene|[zž]enske|\bw\b|wmns)/.test(t)) return 'women';
   if (/(za\s+mu[sš]karce|mu[sš]ke)/.test(t)) return 'men';
   if (/unisex/.test(t)) return 'unisex';
