@@ -268,11 +268,16 @@ export default async function Results({
       />
 
       {/*
-       * Brands: a swipe strip on a phone, two rows and an expander on a desktop.
+       * Brands: two rows everywhere, with an expander for the rest.
        *
        * All 48 laid flat came to 562px on a 375px screen — sixteen rows of chips before
-       * a single shoe — and five rows at 1280px. Nothing is hidden either way: the strip
-       * scrolls, and the expander opens the rest.
+       * a single shoe — and five rows at 1280px.
+       *
+       * A horizontal swipe strip was tried on phones first and pulled: nothing about a
+       * row of chips announces that it scrolls, and the overlay scrollbar sat on top of
+       * the chips it was meant to describe. A visible "Svi brendovi" line is a control
+       * people can see, and using one pattern at every width means the phone is not the
+       * variant that gets tested last.
        *
        * The toggle is a checkbox rather than <details> because <details> hides every
        * child when closed, and the point here is that two rows stay visible. Same
@@ -281,7 +286,7 @@ export default async function Results({
       <nav aria-label={t.brand} className="mb-8">
         <input type="checkbox" id={BRAND_EXPAND} className="peer sr-only" />
 
-        <div className="flex items-start gap-2 overflow-x-auto pb-1 text-sm sm:max-h-[4.5rem] sm:flex-wrap sm:overflow-hidden sm:pb-0 sm:peer-checked:max-h-none">
+        <div className="flex max-h-[4.5rem] flex-wrap items-start gap-2 overflow-hidden text-sm peer-checked:max-h-none">
           {/*
            * No "Svi brendovi" reset chip any more: with brands multi-select, every
            * active chip switches itself off and shows it, so a chip whose only state was
@@ -330,18 +335,18 @@ export default async function Results({
 
         {/*
          * Two labels rather than one with swapping text: `peer-checked:` compiles to a
-         * sibling selector, so only a sibling of the checkbox can react to it. Both are
-         * desktop-only — on a phone the strip scrolls instead.
+         * sibling selector, so only a sibling of the checkbox can react to it. The row is
+         * 44px tall so it is a real target under a thumb.
          */}
         <label
           htmlFor={BRAND_EXPAND}
-          className="mt-3 hidden cursor-pointer items-center justify-center gap-1.5 border-t border-neutral-200 pt-2 text-sm text-neutral-600 hover:text-neutral-900 sm:flex sm:peer-checked:hidden"
+          className="mt-2 flex h-11 cursor-pointer items-center justify-center gap-1.5 border-t border-neutral-200 text-sm text-neutral-600 peer-checked:hidden hover:text-neutral-900"
         >
           <span aria-hidden="true">⌄</span> {t.allBrands}
         </label>
         <label
           htmlFor={BRAND_EXPAND}
-          className="mt-3 hidden cursor-pointer items-center justify-center gap-1.5 border-t border-neutral-200 pt-2 text-sm text-neutral-600 hover:text-neutral-900 sm:peer-checked:flex"
+          className="mt-2 hidden h-11 cursor-pointer items-center justify-center gap-1.5 border-t border-neutral-200 text-sm text-neutral-600 peer-checked:flex hover:text-neutral-900"
         >
           <span aria-hidden="true">⌃</span> {t.fewerBrands}
         </label>
@@ -496,10 +501,9 @@ function FilterChip({
     <Link
       href={href}
       className={[
-        // `shrink-0` and `whitespace-nowrap` matter in the horizontal strip: flex items
-        // shrink by default, so 48 chips in a 335px row collapsed to their longest word
-        // and "Sergio Tacchini" wrapped onto three lines, which stretched every chip to
-        // 70px tall.
+        // A brand name never breaks across lines: "Sergio Tacchini" wrapping turns one
+        // chip into a three-line lozenge and, with the row stretching to match, drags
+        // every chip beside it to the same height.
         'shrink-0 rounded-full border px-3 py-1 whitespace-nowrap transition',
         'focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none',
         active
