@@ -23,6 +23,8 @@ export const t = {
   clearSearch: 'poništi pretragu',
   brand: 'Brend',
   allBrands: 'Svi brendovi',
+  fewerBrands: 'Manje brendova',
+  clearBrands: 'Poništi brendove',
   model: 'Model',
   clearModel: 'prikaži sve',
 

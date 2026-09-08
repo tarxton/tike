@@ -94,12 +94,18 @@ export default async function Results({
   // A selected brand whose count drops to zero under the other filters disappears from
   // the facet list entirely, so it is appended here or the filter could not be switched
   // off except by editing the URL.
+  // Selected brands lead, so a picked chip is never the one clipped by the two-row
+  // collapse — the same trap the old top-twelve cut had, in a new shape.
   const brandChips = [
     ...brandFacets,
     ...brands
       .filter((b) => !brandFacets.some((f) => f.brand.toLowerCase() === b.toLowerCase()))
       .map((brand) => ({ brand, count: 0 })),
-  ];
+  ].sort((a, b) => {
+    const aOn = selectedBrands.has(a.brand.toLowerCase()) ? 0 : 1;
+    const bOn = selectedBrands.has(b.brand.toLowerCase()) ? 0 : 1;
+    return aOn - bOn;
+  });
   const toggleBrand = (value: string) => {
     const lower = value.toLowerCase();
     return selectedBrands.has(lower)
@@ -260,42 +266,84 @@ export default async function Results({
         }
       />
 
-      <nav aria-label={t.brand} className="mb-8 flex flex-wrap gap-2 text-sm">
-        <FilterChip
-          href={buildHref({
-            sizes: selected,
-            brands: [],
-            model: modelKey,
-            query,
-            kids: showKids,
-            sort,
-            onSale,
-            shops,
-            genders,
-          })}
-          active={brands.length === 0}
+      {/*
+       * Brands: a swipe strip on a phone, two rows and an expander on a desktop.
+       *
+       * All 48 laid flat came to 562px on a 375px screen — sixteen rows of chips before
+       * a single shoe — and five rows at 1280px. Nothing is hidden either way: the strip
+       * scrolls, and the expander opens the rest.
+       *
+       * The toggle is a checkbox rather than <details> because <details> hides every
+       * child when closed, and the point here is that two rows stay visible. Same
+       * peer-checked pattern the size chips already use, so it needs no JavaScript.
+       */}
+      <nav aria-label={t.brand} className="mb-8">
+        <input type="checkbox" id={BRAND_EXPAND} className="peer sr-only" />
+
+        <div className="flex items-start gap-2 overflow-x-auto pb-1 text-sm sm:max-h-[4.5rem] sm:flex-wrap sm:overflow-hidden sm:pb-0 sm:peer-checked:max-h-none">
+          {/*
+           * No "Svi brendovi" reset chip any more: with brands multi-select, every
+           * active chip switches itself off and shows it, so a chip whose only state was
+           * "nothing is selected" said nothing the other 48 were not already saying.
+           * What it did usefully — clear several at once — survives here, and only
+           * appears when there is something to clear.
+           */}
+          {brands.length > 0 ? (
+            <FilterChip
+              href={buildHref({
+                sizes: selected,
+                brands: [],
+                model: modelKey,
+                query,
+                kids: showKids,
+                sort,
+                onSale,
+                shops,
+                genders,
+              })}
+              active={false}
+            >
+              <span aria-hidden="true">×</span> {t.clearBrands}
+            </FilterChip>
+          ) : null}
+          {brandChips.map((b) => (
+            <FilterChip
+              key={b.brand}
+              href={buildHref({
+                sizes: selected,
+                brands: toggleBrand(b.brand),
+                model: modelKey,
+                query,
+                kids: showKids,
+                sort,
+                onSale,
+                shops,
+                genders,
+              })}
+              active={selectedBrands.has(b.brand.toLowerCase())}
+            >
+              {b.brand}
+            </FilterChip>
+          ))}
+        </div>
+
+        {/*
+         * Two labels rather than one with swapping text: `peer-checked:` compiles to a
+         * sibling selector, so only a sibling of the checkbox can react to it. Both are
+         * desktop-only — on a phone the strip scrolls instead.
+         */}
+        <label
+          htmlFor={BRAND_EXPAND}
+          className="mt-3 hidden cursor-pointer items-center justify-center gap-1.5 border-t border-neutral-200 pt-2 text-sm text-neutral-600 hover:text-neutral-900 sm:flex sm:peer-checked:hidden"
         >
-          {t.allBrands}
-        </FilterChip>
-        {brandChips.map((b) => (
-          <FilterChip
-            key={b.brand}
-            href={buildHref({
-              sizes: selected,
-              brands: toggleBrand(b.brand),
-              model: modelKey,
-              query,
-              kids: showKids,
-              sort,
-              onSale,
-              shops,
-              genders,
-            })}
-            active={selectedBrands.has(b.brand.toLowerCase())}
-          >
-            {b.brand}
-          </FilterChip>
-        ))}
+          <span aria-hidden="true">⌄</span> {t.allBrands}
+        </label>
+        <label
+          htmlFor={BRAND_EXPAND}
+          className="mt-3 hidden cursor-pointer items-center justify-center gap-1.5 border-t border-neutral-200 pt-2 text-sm text-neutral-600 hover:text-neutral-900 sm:peer-checked:flex"
+        >
+          <span aria-hidden="true">⌃</span> {t.fewerBrands}
+        </label>
       </nav>
 
       {pastTheEnd ? (
@@ -378,6 +426,9 @@ export default async function Results({
 /** Results per page. Also the page size the pager and the range notice count in. */
 const PAGE_SIZE = 48;
 
+/** Ties the expander label to its checkbox. Fixed, since there is one brand list. */
+const BRAND_EXPAND = 'brand-expand';
+
 /** `?strana=3`. Anything that is not a whole page number is page one. */
 /** `?prodavnica=buzz,officeshoes` — empty entries dropped. */
 function parseList(raw: string | undefined): string[] {
@@ -444,7 +495,11 @@ function FilterChip({
     <Link
       href={href}
       className={[
-        'rounded-full border px-3 py-1 transition',
+        // `shrink-0` and `whitespace-nowrap` matter in the horizontal strip: flex items
+        // shrink by default, so 48 chips in a 335px row collapsed to their longest word
+        // and "Sergio Tacchini" wrapped onto three lines, which stretched every chip to
+        // 70px tall.
+        'shrink-0 rounded-full border px-3 py-1 whitespace-nowrap transition',
         'focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none',
         active
           ? 'border-neutral-900 bg-neutral-900 text-white'
