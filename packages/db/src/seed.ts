@@ -74,7 +74,7 @@ const shops = [
     // query strings and Magento's internal /catalog/ routes — so this crawl is within
     // the file as written; the reply removes the ambiguity.
     slug: 'djak',
-    logoUrl: null,
+    logoUrl: '/shops/djak.png',
     name: 'Đak Sport',
     baseUrl: 'https://www.djaksport.ba',
     platform: 'magento2' as const,

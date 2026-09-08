@@ -399,13 +399,13 @@ export default async function Results({
           htmlFor={BRAND_EXPAND}
           className="mt-2 flex h-11 cursor-pointer items-center justify-center gap-1.5 border-t border-neutral-200 text-sm text-neutral-600 peer-checked:hidden hover:text-neutral-900"
         >
-          <span aria-hidden="true">⌄</span> {t.allBrands}
+          <Chevron direction="down" /> {t.allBrands}
         </label>
         <label
           htmlFor={BRAND_EXPAND}
           className="mt-2 hidden h-11 cursor-pointer items-center justify-center gap-1.5 border-t border-neutral-200 text-sm text-neutral-600 peer-checked:flex hover:text-neutral-900"
         >
-          <span aria-hidden="true">⌃</span> {t.fewerBrands}
+          <Chevron direction="up" /> {t.fewerBrands}
         </label>
       </nav>
 
@@ -543,6 +543,31 @@ function buildHref({
   if (genders && genders.length > 0) sp.set('pol', genders.join(','));
   const qs = sp.toString();
   return qs ? `/patike?${qs}` : '/patike';
+}
+
+/**
+ * The expander's arrow, drawn rather than typed.
+ *
+ * It was U+2304 "⌄", which is a mathematical arrowhead: most fonts draw it thin, high in
+ * the line box and a different weight from the text beside it, and some have no glyph for
+ * it at all. Two lines of SVG inherit the label's colour and stroke weight and look the
+ * same everywhere.
+ */
+function Chevron({ direction }: { direction: 'up' | 'down' }) {
+  return (
+    <svg
+      viewBox="0 0 12 12"
+      className="h-3 w-3"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={direction === 'down' ? 'M2.5 4.5 6 8 9.5 4.5' : 'M2.5 7.5 6 4 9.5 7.5'} />
+    </svg>
+  );
 }
 
 function FilterChip({
