@@ -1,10 +1,12 @@
 import type { ParsedOffer, Platform } from '@tike/contracts';
 import { parseNbshop } from './adapters/nbshop';
 import { parseOfficeshoes } from './adapters/officeshoes';
+import { parseMagento2 } from './adapters/magento2';
 
 export { parseNbshop } from './adapters/nbshop';
-export { ParseError } from './errors';
+export { ParseError, UnavailableError } from './errors';
 export { parseOfficeshoes } from './adapters/officeshoes';
+export { parseMagento2, extractSlugStyleCode } from './adapters/magento2';
 export { PoliteFetcher, ForbiddenError, RobotsDisallowedError, USER_AGENT } from './fetcher';
 export {
   parseSitemapLocs,
@@ -31,6 +33,7 @@ export type OfferParser = (html: string, url: string) => ParsedOffer;
 export const parsers: Partial<Record<Platform, OfferParser>> = {
   nbshop: parseNbshop,
   officeshoes: parseOfficeshoes,
+  magento2: parseMagento2,
 };
 
 export function parserFor(platform: Platform): OfferParser {

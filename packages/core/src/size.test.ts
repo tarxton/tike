@@ -14,6 +14,10 @@ describe('parseEuSize', () => {
   it('parses third sizes used by Nike and adidas', () => {
     expect(parseEuSize('44 2/3')?.sizeEu).toBe(44.67);
     expect(parseEuSize('42 1/3')?.sizeEu).toBe(42.33);
+    // Djak writes third sizes with a hyphen; the separator is the shop's typography,
+    // not a different size.
+    expect(parseEuSize('38-2/3')?.sizeEu).toBe(38.67);
+    expect(parseEuSize('37-1/3')?.sizeEu).toBe(37.33);
   });
 
   it('strips local labels', () => {

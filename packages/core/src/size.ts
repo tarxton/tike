@@ -25,8 +25,13 @@ export function parseEuSize(raw: string): ParsedSize | null {
     .replace(',', '.')
     .trim();
 
-  // Fractional form: "44 2/3", "44 1/3"
-  const fraction = cleaned.match(/^(\d{1,2})\s+(\d)\/(\d)$/);
+  // Fractional form: "44 2/3", "44 1/3", and Magento's hyphenated "38-2/3".
+  //
+  // The separator varies by shop, not by meaning: Djak's adidas listings write third
+  // sizes as "37-1/3" where NBSHOP writes "37 1/3". Requiring a space dropped six of ten
+  // sizes on a shoe that stocks them, which reads downstream as a shop not carrying your
+  // size rather than as a parser that could not read it.
+  const fraction = cleaned.match(/^(\d{1,2})[\s-](\d)\/(\d)$/);
   if (fraction) {
     const whole = Number(fraction[1]);
     const numerator = Number(fraction[2]);

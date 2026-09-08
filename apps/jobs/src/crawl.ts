@@ -13,6 +13,7 @@ import { crawlConfigSchema } from '@tike/contracts';
 import {
   ForbiddenError,
   ParseError,
+  UnavailableError,
   PoliteFetcher,
   XHR_HEADERS,
   filterByPath,
@@ -178,6 +179,8 @@ await withDb(async (db) => {
   const failures: { url: string; reason: string }[] = [];
   let parsed = 0;
   let changed = 0;
+  /** Read fine, nothing to sell. Reported, but kept out of the failure budget. */
+  let unavailable = 0;
 
   for (const [i, url] of urls.entries()) {
     if (!fetcher.isAllowed(url)) {
@@ -269,6 +272,14 @@ await withDb(async (db) => {
       changed += 1;
     } catch (err) {
       if (err instanceof ForbiddenError) throw err; // stop the whole run
+      // A product the shop has sold out of is not a failure of any kind. Magento lists
+      // its whole history in the sitemap and 70% of Djak's sneakers are gone, so counting
+      // these would hold that shop permanently over the breaker while its markup is fine.
+      // The offer is simply not seen this run; the staleness rule retires it after three.
+      if (err instanceof UnavailableError) {
+        unavailable += 1;
+        continue;
+      }
       // Only bad *data* counts toward the failure budget. A database or network error
       // is a bug or an outage, not a shop changing its markup, and hiding it in the
       // parse-failure count would let the circuit breaker measure the wrong thing.
@@ -300,7 +311,7 @@ await withDb(async (db) => {
 
   console.log(
     `\nrun ${runId}: parsed=${parsed} failed=${failures.length} written=${changed} ` +
-      `failure-rate=${(failureRate * 100).toFixed(1)}%`,
+      `sold-out=${unavailable} failure-rate=${(failureRate * 100).toFixed(1)}%`,
   );
 
   if (breakerTripped) {

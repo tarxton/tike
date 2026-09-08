@@ -104,3 +104,84 @@ export function sanitizeFixture(html) {
     '',
   ].join('\n');
 }
+
+/**
+ * Magento 2 keeps identity, price and sizes inside a script, which is exactly what this
+ * module otherwise throws away — so the block is **rebuilt** rather than copied.
+ *
+ * Only the four keys the parser reads survive: productId, the size attribute, prices, and
+ * one gallery image URL. Copying the original would carry along whatever else Magento put
+ * in its 42 init blocks, and rebuilding makes it impossible for a credential or a stock
+ * quantity to ride into a public repository unnoticed.
+ */
+export function sanitizeMagento2Fixture(html) {
+  const $ = cheerio.load(html);
+  const heading = $('h1').first().toString() ?? '';
+
+  let config = null;
+  for (const el of $('script[type="text/x-magento-init"]').toArray()) {
+    const raw = $(el).contents().text();
+    if (!raw.includes('jsonConfig')) continue;
+    try {
+      const data = JSON.parse(raw);
+      for (const modules of Object.values(data ?? {})) {
+        for (const cfg of Object.values(modules ?? {})) {
+          if (cfg?.jsonConfig) config = cfg.jsonConfig;
+        }
+      }
+    } catch {
+      // A block we cannot read is a block we cannot vouch for; drop it.
+    }
+    break;
+  }
+
+  const attributes = config?.attributes ?? [];
+  const list = Array.isArray(attributes) ? attributes : Object.values(attributes);
+  const size = list.find((a) => a?.code?.toLowerCase() === 'size');
+
+  const minimal = {
+    productId: config?.productId ?? '',
+    // Option ids and child product ids are Magento's internal keys, not something the
+    // parser reads, so only the labels are kept.
+    attributes: size
+      ? [{ code: 'size', options: (size.options ?? []).map((o) => ({ label: o.label })) }]
+      : [],
+    prices: config?.prices ?? {},
+  };
+
+  const swatch = {
+    '[data-role=swatch-options]': {
+      'Magento_Swatches/js/swatch-renderer': { jsonConfig: minimal },
+    },
+  };
+
+  const gallery = html.match(
+    /"mage\/gallery\/gallery"\s*:\s*\{[\s\S]*?"data"\s*:\s*(\[[\s\S]*?\])\s*,/,
+  );
+  let galleryBlock = '';
+  if (gallery?.[1]) {
+    try {
+      const first = JSON.parse(gallery[1]).find((d) => d.img)?.img;
+      if (first) {
+        galleryBlock =
+          '<script type="text/x-magento-init">' +
+          JSON.stringify({
+            '[data-gallery-role=gallery-placeholder]': {
+              'mage/gallery/gallery': { data: [{ img: first }] },
+            },
+          }) +
+          '</script>';
+      }
+    } catch {
+      // No image is survivable; the parser returns null for it.
+    }
+  }
+
+  return [
+    heading,
+    `<script type="text/x-magento-init">${JSON.stringify(swatch)}</script>`,
+    galleryBlock,
+  ]
+    .filter(Boolean)
+    .join('\n');
+}

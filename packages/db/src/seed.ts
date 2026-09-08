@@ -67,6 +67,42 @@ const shops = [
       },
     },
   },
+  {
+    // Magento 2. Djak's operator gave written permission to crawl at one request per
+    // second after an outreach email, having previously 403'd an identified crawler.
+    // Their robots.txt never forbade product pages in the first place — it disallows
+    // query strings and Magento's internal /catalog/ routes — so this crawl is within
+    // the file as written; the reply removes the ambiguity.
+    slug: 'djak',
+    logoUrl: null,
+    name: 'Đak Sport',
+    baseUrl: 'https://www.djaksport.ba',
+    platform: 'magento2' as const,
+    sitemapUrl: 'https://www.djaksport.ba/sitemap.xml',
+    // Their robots.txt asks for Crawl-Delay 1 and the operator confirmed the same number,
+    // so this is both the polite floor and the agreed ceiling.
+    minDelayMs: 1200,
+    maxConcurrency: 1,
+    crawlConfig: {
+      // Product type is inside the slug ("nike-patike-air-max-…"), never a path segment,
+      // so the same contains-filter Office Shoes needs. 3,642 of 14,291 sitemap URLs.
+      pathContains: ['-patike-'],
+    },
+    /*
+     * Off until their WAF is told what their operator already agreed to.
+     *
+     * Cloudflare 403s our HTTP client on TLS fingerprint, not on identity: the same
+     * User-Agent from curl gets 200 from the same machine and IP, and no combination of
+     * request headers changes it. So the block is bot management reacting to *what
+     * client we are*, not the shop refusing us — but choosing whichever client slips
+     * past a bot check is working around bot protection, and this project does not do
+     * that even with permission in hand.
+     *
+     * The fix belongs to Djak: allowlist the tike-bot User-Agent. Flip this to true once
+     * they confirm. Everything else — adapter, fixtures, tests, this row — is ready.
+     */
+    active: false,
+  },
 ];
 
 await withDb(async (db) => {
@@ -74,13 +110,15 @@ await withDb(async (db) => {
     const [row] = await db
       .insert(shop)
       .values({
-        ...s,
         currency: 'BAM',
-        // Neither shop sets Crawl-delay; 1.2s is our own floor.
+        // Our own floor for a shop that publishes no Crawl-delay. Spread last so a shop
+        // row can raise it: Djak asks for one request per second and its operator agreed
+        // the same number, and a default quietly overriding that would break a promise.
         minDelayMs: 1200,
         maxConcurrency: 2,
         dealType: 'none',
         active: true,
+        ...s,
       })
       .onConflictDoUpdate({
         target: shop.slug,
@@ -91,6 +129,11 @@ await withDb(async (db) => {
           logoUrl: s.logoUrl,
           sitemapUrl: s.sitemapUrl,
           crawlConfig: s.crawlConfig,
+          // Re-seeding must be able to tighten politeness, not just content.
+          minDelayMs: 'minDelayMs' in s ? s.minDelayMs : 1200,
+          maxConcurrency: 'maxConcurrency' in s ? s.maxConcurrency : 2,
+          // A shop switched off for a reason must stay off across re-seeds.
+          active: 'active' in s ? s.active : true,
         },
       })
       .returning({ id: shop.id, slug: shop.slug });
