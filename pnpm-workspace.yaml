@@ -2,13 +2,29 @@ packages:
   - 'apps/*'
   - 'packages/*'
 
-# Build scripts are opt-in. `sharp` gets enabled when the Phase 2 image pipeline lands.
+# Build scripts are opt-in.
 allowBuilds:
   # esbuild ships prebuilt binaries via its install script — required by vitest, tsx
   # and drizzle-kit.
   esbuild: true
-  sharp: false
+  # The image pipeline has landed, so sharp is now a real dependency of @tike/jobs and
+  # needs its install script to fetch the platform binary. Left off, it resolves on a
+  # developer machine that happens to have a copy already and fails on a clean runner.
+  sharp: true
   unrs-resolver: false
+
+# Transitive packages pinned past an advisory.
+#
+# Both are dev-only and neither reaches the deployed site, but a security workflow that is
+# allowed to stay red teaches everyone to ignore it, which is the actual risk.
+overrides:
+  # GHSA-2883-xcg3-v3hh — CPU exhaustion on merge keys. Reached through commitlint and
+  # eslint config loading, both of which read only files from this repository.
+  'js-yaml@>=4.0.0 <4.3.2': '>=4.3.2'
+  # GHSA-67mh-4wv8-2f99 — a dev server accepts cross-origin requests. Comes in through
+  # drizzle-kit's deprecated @esbuild-kit shims, which pin an old esbuild; drizzle-kit is
+  # already on its latest release, so an override is the only way to move it.
+  'esbuild@<=0.24.2': '>=0.25.0'
 
 minimumReleaseAgeExclude:
   - lint-staged@17.4.1
