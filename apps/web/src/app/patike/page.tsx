@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { after } from 'next/server';
 import {
   availableBrands,
+  logSearchMiss,
   availableShops,
   availableSizes,
   isSortKey,
@@ -58,20 +60,23 @@ export default async function Results({
     (GENDERS as readonly { value: string }[]).some((x) => x.value === g),
   );
 
+  // Defined once so the fuzzy retry below cannot drift from the search it is retrying.
+  const searchArgs = {
+    sizesEu: selected,
+    brands,
+    modelKey,
+    query,
+    includeKids: showKids,
+    onSale,
+    shops,
+    genders,
+    sort,
+    limit: PAGE_SIZE,
+    offset: (page - 1) * PAGE_SIZE,
+  };
+
   const [results, sizes, brandFacets, allShops, activeModel] = await Promise.all([
-    searchOffers({
-      sizesEu: selected,
-      brands,
-      modelKey,
-      query,
-      includeKids: showKids,
-      onSale,
-      shops,
-      genders,
-      sort,
-      limit: PAGE_SIZE,
-      offset: (page - 1) * PAGE_SIZE,
-    }),
+    searchOffers(searchArgs),
     availableSizes(),
     availableBrands({
       sizesEu: selected,
@@ -85,6 +90,44 @@ export default async function Results({
     availableShops(),
     modelByKey(modelKey),
   ]);
+
+  /*
+   * Nothing found: say so where it can be counted, then try again more loosely.
+   *
+   * The log runs in `after`, so a shopper who found nothing is not also made to wait on
+   * a write they will never see. Only page one is recorded — running off the end of a
+   * result set is not a miss, it is a pager.
+   */
+  const missed = results.total === 0 && page === 1 && Boolean(query);
+
+  // A second attempt at trigram distance, so "cortz" reaches Cortez. Deliberately not
+  // folded into the first query: a search that works must not be diluted by near-misses,
+  // and this costs a round trip only on a page that was going to be empty anyway.
+  const fuzzy = missed ? await searchOffers({ ...searchArgs, fuzzy: true }) : null;
+  const shown = fuzzy && fuzzy.total > 0 ? fuzzy : results;
+  const didYouMean = Boolean(fuzzy && fuzzy.total > 0);
+
+  if (missed) {
+    // Logged after the retry so the row can say which kind of miss it was. "cortz",
+    // rescued by trigram distance, is a spelling to fold into matching; "zxcvbn", which
+    // nothing rescued, is either a shoe the catalogue lacks or a word it cannot parse.
+    // Recording both as simply "no results" would blur the two signals into one number.
+    after(() =>
+      logSearchMiss({
+        query: query!,
+        sizesEu: selected,
+        filters: {
+          brands,
+          genders,
+          shops,
+          onSale,
+          model: modelKey,
+          kids: showKids,
+          rescued: didYouMean,
+        },
+      }),
+    );
+  }
 
   const selectedBrands = new Set(brands.map((b) => b.toLowerCase()));
   // Every brand in the catalogue, not a top-twelve cut. The cut hid 36 of 48 brands —
@@ -122,13 +165,13 @@ export default async function Results({
     onSale ||
     shops.length > 0 ||
     genders.length > 0;
-  const totalPages = Math.max(1, Math.ceil(results.total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(shown.total / PAGE_SIZE));
   const firstOnPage = (page - 1) * PAGE_SIZE + 1;
-  const lastOnPage = firstOnPage + results.items.length - 1;
+  const lastOnPage = firstOnPage + shown.items.length - 1;
   // A page past the end returns no rows, and with no rows there is no window to count
   // over — so `total` reads 0 and an over-shot page is indistinguishable from a search
   // that genuinely matched nothing. Tell them apart by the page number.
-  const pastTheEnd = results.items.length === 0 && page > 1;
+  const pastTheEnd = shown.items.length === 0 && page > 1;
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
@@ -138,9 +181,9 @@ export default async function Results({
         </Link>
         <p className="text-sm text-neutral-600">
           <strong className="font-semibold text-neutral-900 tabular-nums">
-            {formatCount(results.total)}
+            {formatCount(shown.total)}
           </strong>{' '}
-          {pluralResults(results.total)}
+          {pluralResults(shown.total)}
           {selected.length > 0 ? (
             <>
               {' · '}
@@ -203,7 +246,19 @@ export default async function Results({
         </p>
       ) : null}
 
-      {query ? (
+      {/*
+       * Said plainly when the results are approximate. Quietly substituting near-misses
+       * for what was asked would leave someone wondering why a search for one shoe
+       * returned another.
+       */}
+      {didYouMean ? (
+        <p className="mb-4 text-sm text-neutral-600">
+          {t.noExactResults} <strong className="text-neutral-900">“{query}”</strong>.{' '}
+          {t.showingSimilar}
+        </p>
+      ) : null}
+
+      {query && !didYouMean ? (
         <p className="mb-4 text-sm text-neutral-600">
           {t.resultsFor} <strong className="text-neutral-900">“{query}”</strong>{' '}
           <Link
@@ -225,7 +280,7 @@ export default async function Results({
         </p>
       ) : null}
 
-      {results.total > 0 ? (
+      {shown.total > 0 ? (
         // Ruled off from the filter block above it: the search box and the size chips
         // compose a query, this changes how the answer is arranged. Different jobs.
         <div className="mt-5 mb-6 flex justify-start border-t border-neutral-200 pt-4">
@@ -374,7 +429,7 @@ export default async function Results({
             {t.backToFirstPage}
           </Link>
         </div>
-      ) : results.items.length === 0 ? (
+      ) : shown.items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-neutral-300 px-6 py-16 text-center">
           <p className="font-medium text-neutral-900">{t.noResults}</p>
           <p className="mt-1 text-sm text-neutral-600">{t.noResultsHint}</p>
@@ -389,7 +444,7 @@ export default async function Results({
         </div>
       ) : (
         <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {results.items.map((offer) => (
+          {shown.items.map((offer) => (
             <li key={offer.offerId}>
               <OfferCard offer={offer} sizes={selected} />
             </li>
@@ -397,10 +452,10 @@ export default async function Results({
         </ul>
       )}
 
-      {results.items.length > 0 && totalPages > 1 ? (
+      {shown.items.length > 0 && totalPages > 1 ? (
         <>
           <p className="mt-6 text-center text-sm text-neutral-600">
-            {showingRange(firstOnPage, lastOnPage, results.total)}
+            {showingRange(firstOnPage, lastOnPage, shown.total)}
           </p>
           <Pager
             page={page}

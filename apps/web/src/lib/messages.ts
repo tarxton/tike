@@ -48,6 +48,8 @@ export const t = {
   // Not "nema patika u tom broju" — the empty state also fires on a model query or a
   // brand facet, and blaming the size sends the user to fix the wrong filter.
   noResults: 'Nema rezultata za tu pretragu.',
+  noExactResults: 'Nema tačnih rezultata za',
+  showingSimilar: 'Prikazujemo slične.',
   noResultsHint: 'Probaj drugi broj ili model.',
   clearFilters: 'Obriši filtere',
 

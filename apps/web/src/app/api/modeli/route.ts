@@ -18,7 +18,10 @@ export async function GET(request: Request): Promise<Response> {
   const query = new URL(request.url).searchParams.get('q') ?? '';
   if (query.trim().length < MIN_QUERY) return Response.json({ items: [] });
 
-  const items = await modelSuggestions(query, MAX_ROWS);
+  // Exact first, then trigram distance, so "sketchers" still offers Skechers. Typing is
+  // where typos happen, so the dropdown needs this at least as much as the results page.
+  let items = await modelSuggestions(query, MAX_ROWS);
+  if (items.length === 0) items = await modelSuggestions(query, MAX_ROWS, true);
   return Response.json(
     { items },
     // Suggestions change only when a crawl writes new products, so a short shared cache

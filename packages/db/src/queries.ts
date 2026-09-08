@@ -104,6 +104,13 @@ export interface SearchParams {
    */
   modelKey?: string;
   /**
+   * Match titles by trigram closeness instead of by substring.
+   *
+   * Only used as a second attempt after an exact search returned nothing, so a query
+   * that works normally is never diluted by near-misses.
+   */
+  fuzzy?: boolean;
+  /**
    * One product to leave out — the shoe whose page is asking.
    *
    * Without it a product page's "other colourways" shelf would lead with the colourway
@@ -240,6 +247,7 @@ export interface ModelSuggestion {
 export async function modelSuggestions(
   query: string | undefined,
   limit = 8,
+  fuzzy = false,
 ): Promise<ModelSuggestion[]> {
   const tokens = (query ?? '').trim().split(/\s+/).filter(Boolean);
   if (tokens.length === 0) return [];
@@ -261,13 +269,17 @@ export async function modelSuggestions(
     join offer o on o.product_id = p.id and o.in_stock
     join shop s on s.id = o.shop_id and s.active
     where p.model <> ''
-      ${sql.join(
-        tokens.map(
-          (t) =>
-            sql`and ${foldedFamily} like '%' || regexp_replace(unaccent(lower(${t})), '[^a-z0-9]', '', 'g') || '%'`,
-        ),
-        sql` `,
-      )}
+      ${
+        fuzzy
+          ? sql`and word_similarity(${normalized}, ${familyText}) >= ${FUZZY_THRESHOLD}`
+          : sql.join(
+              tokens.map(
+                (t) =>
+                  sql`and ${foldedFamily} like '%' || regexp_replace(unaccent(lower(${t})), '[^a-z0-9]', '', 'g') || '%'`,
+              ),
+              sql` `,
+            )
+      }
     group by ${familyKey}
     -- Score first, then the bigger family: with two equally good matches, the model
     -- carrying more colourways is the one more people mean.
@@ -314,6 +326,74 @@ export async function modelByKey(
     brand: first.brand === null ? null : String(first.brand),
     model: String(first.model),
   };
+}
+
+/**
+ * Record a search that found nothing.
+ *
+ * The single most useful number this site can collect about itself: it says either that
+ * the catalogue is missing something people want, or that the search cannot find what it
+ * already has. Both are actionable, and neither is visible from click logs.
+ *
+ * A write on the read client, deliberately. One INSERT needs no transaction, so the
+ * HTTP driver's inability to run them (ADR-0001) does not apply, and opening a WebSocket
+ * pool to record a log line would cost more than the query that missed.
+ *
+ * Never throws. A failed log must not turn an empty result page into an error page.
+ */
+export async function logSearchMiss(params: {
+  query: string;
+  sizesEu?: number[];
+  filters?: Record<string, unknown>;
+}): Promise<void> {
+  // Truncated rather than rejected: a 4KB query string is still evidence of something,
+  // and the column should not carry someone's paste of a novel.
+  const query = params.query.trim().slice(0, 200);
+  const sizes = params.sizesEu ?? [];
+  const primarySize = sizes.length > 0 ? sizes[0]! : null;
+  const filters = { ...(params.filters ?? {}), sizes };
+
+  try {
+    await db().execute(sql`
+      insert into search_miss (query, size_eu, filters)
+      values (${query}, ${primarySize}, ${JSON.stringify(filters)}::jsonb)
+    `);
+  } catch {
+    // Swallowed on purpose. See above.
+  }
+}
+
+/**
+ * How close a typo has to be before it counts as the same word.
+ *
+ * Measured against the live catalogue rather than picked: at 0.45 "samaba" returned one
+ * row and none of the 42 adidas Samba listings; at 0.40 it returns 43 rows of which 42
+ * are Samba. Every other case tested — asixs, sketchers, jordn, dunkk, cortz — scores
+ * identically at 0.40 and 0.50, and nonsense ("zxcvbn", "qqqq") returns nothing at any
+ * of them. So 0.40 is strictly better on this data, not a loosening.
+ *
+ * It only ever runs after an exact search has already returned nothing, which is what
+ * makes a low bar the right call: the alternative on offer is an empty page.
+ */
+const FUZZY_THRESHOLD = 0.4;
+
+/** The title folded to letters, digits and spaces — what trigram matching compares. */
+const spacedTitle = sql`regexp_replace(unaccent(lower(o.title)), '[^a-z0-9 ]', ' ', 'g')`;
+
+/**
+ * Titles close enough to the query to be what the user meant.
+ *
+ * `word_similarity` rather than `similarity`, because it scores the best-matching run of
+ * words inside the title instead of the title as a whole: "cortz" against "Nike Patike
+ * Cortez" should be judged on "cortez", not diluted by the two words around it.
+ */
+function fuzzyTitleFilter(query: string | undefined) {
+  const trimmed = query?.trim();
+  if (!trimmed) return sql``;
+  return sql`and word_similarity(
+    regexp_replace(unaccent(lower(${trimmed})), '[^a-z0-9 ]', ' ', 'g'),
+    ${spacedTitle}
+  ) >= ${FUZZY_THRESHOLD}`;
 }
 
 /**
@@ -455,6 +535,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
     sizesEu,
     brands,
     modelKey,
+    fuzzy,
     excludeProductId,
     query,
     includeKids,
@@ -498,7 +579,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
         ${brandFilter(brands)}
         ${modelFilter(modelKey)}
         ${excludeProductId === undefined ? sql`` : sql`and (o.product_id is null or o.product_id <> ${excludeProductId})`}
-        ${titleFilter(query)}
+        ${fuzzy ? fuzzyTitleFilter(query) : titleFilter(query)}
     ),
     grouped as (
       select

@@ -8,6 +8,7 @@ export {
   availableShops,
   productBySlug,
   modelSuggestions,
+  logSearchMiss,
   modelByKey,
   isSortKey,
   SORT_KEYS,
