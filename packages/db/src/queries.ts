@@ -16,6 +16,7 @@ export interface SearchResult {
   offerId: number;
   shopSlug: string;
   shopName: string;
+  /** The product's canonical name, so a card and its product page agree. */
   title: string;
   brand: string | null;
   url: string;
@@ -638,8 +639,16 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
       pr.slug         as "productSlug",
       s.slug          as "shopSlug",
       s.name          as "shopName",
-      b.title         as "title",
-      b.raw_brand     as "brand",
+      -- The product's name, not the cheapest shop's title.
+      --
+      -- The card used to show whatever the offer behind best_offer_id was called, and
+      -- that offer is picked by price — so on 1.763 cards, 327 of them multi-shop, the
+      -- name came from Đak, who writes "NIKE PATIKE AIR PRESTO ZA MUŠKARCE" where Buzz
+      -- writes "Air Presto". The shop with the best price decided what the shoe was
+      -- called. One product now has one name wherever it appears, and it is the same
+      -- string the product page shows.
+      coalesce(pr.model, b.title) as "title",
+      coalesce(pb.name, b.raw_brand) as "brand",
       b.url           as "url",
       b.image_url     as "imageUrl",
       g.min_price     as "priceMinor",
@@ -687,6 +696,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
     join shop s on s.id = b.shop_id
     -- Only matched results have a product page to link to.
     left join product pr on pr.id = b.product_id
+    left join brand pb on pb.id = pr.brand_id
     ${resultOrder(query, sort)}
     limit ${limit} offset ${offset}
   `);
@@ -781,7 +791,16 @@ export async function availableBrands(
     -- shows after the same click. Counting rows here would say "Nike 73" and then land
     -- on a page reporting 68.
     select
-      o.raw_brand as "brand",
+      -- One chip per brand, not one per spelling of it.
+      --
+      -- Shops disagree about capitals: Đak writes NIKE, ADIDAS and PUMA where the other
+      -- four write Nike, adidas and Puma, and grouping on the raw string put both in the
+      -- filter — "NIKE 251" beside "Nike 1.970", two chips that select the same 2.221
+      -- offers because the filter itself has always been case-insensitive. Grouping folds
+      -- case and accents; the label is the least shouty spelling, which is also how each
+      -- brand writes its own name.
+      (array_agg(o.raw_brand order by (o.raw_brand = upper(o.raw_brand)), o.raw_brand))[1]
+        as "brand",
       count(distinct coalesce('p' || o.product_id::text, 'o' || o.id::text))::int as "count"
     from offer o
     join shop s on s.id = o.shop_id
@@ -793,8 +812,8 @@ export async function availableBrands(
       ${genderFilter(genders)}
       ${modelFilter(modelKey)}
       ${titleFilter(query)}
-    group by o.raw_brand
-    order by 2 desc, o.raw_brand asc
+    group by unaccent(lower(o.raw_brand))
+    order by 2 desc, 1 asc
   `);
   return (rows.rows as Record<string, unknown>[]).map((r) => ({
     brand: String(r.brand),

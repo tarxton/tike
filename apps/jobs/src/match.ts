@@ -15,6 +15,7 @@
 import { sql } from 'drizzle-orm';
 import {
   cleanModel,
+  isPlaceholderModel,
   isAutoMergeable,
   isPlausibleSizeSpan,
   matchOffers,
@@ -330,9 +331,18 @@ await withDb(async (db) => {
     const planned = allGroups.map((ids) => {
       // The shortest model name is usually the cleanest: shops append their own
       // qualifiers ("- BUBBLE LOVE", "(GS)") to the same underlying shoe.
+      //
+      // A placeholder loses regardless of length. When a shop's title says nothing but
+      // brand, category and audience, `cleanModel` falls back to "Patike" — six
+      // characters, shorter than every real name, and it would take the whole group's
+      // name with it.
       const members = ids
         .map((id) => byId.get(id)!)
-        .sort((x, y) => x.model.length - y.model.length);
+        .sort(
+          (x, y) =>
+            Number(isPlaceholderModel(x.model)) - Number(isPlaceholderModel(y.model)) ||
+            x.model.length - y.model.length,
+        );
       const lead = members[0]!;
       const slug = `${slugify([lead.brand, lead.model].filter(Boolean).join(' '))}-${lead.offerId}`;
       return { members, lead, slug };
