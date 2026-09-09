@@ -95,6 +95,11 @@ const shops = [
       // written permission to crawl, so the client is what changes here, not the identity
       // or the rate. See the transport note in the crawl config contract.
       transport: 'curl' as const,
+      // Same Cloudflare, second refusal, and this one the transport cannot answer. From a
+      // GitHub runner the robots.txt returns 200 and the sitemap 403; from a residential
+      // connection both return 200. So the crawl runs from a machine outside CI until Đak
+      // allowlists the crawler, and the shop stays live on the site meanwhile.
+      runsInCi: false,
     },
   },
 ];

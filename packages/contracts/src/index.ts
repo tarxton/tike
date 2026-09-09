@@ -67,6 +67,21 @@ export const crawlConfigSchema = z.object({
    * checks, same one-request-at-a-time spacing.
    */
   transport: z.enum(['fetch', 'curl']).default('fetch'),
+  /**
+   * Whether the scheduled GitHub Actions crawl includes this shop.
+   *
+   * Separate from `shop.active`, and the distinction matters: `active` decides whether a
+   * shop appears on the site, this decides only where its crawl can run from. Đak's
+   * Cloudflare answers robots.txt from a GitHub runner and 403s the sitemap on the same
+   * request path that succeeds from a residential connection, so every nightly run fails
+   * before it fetches a page. Turning the shop off would hide 1.779 offers to fix a
+   * scheduling problem; leaving it in the matrix opens an issue every night for a fault
+   * no commit can repair.
+   *
+   * The crawl still runs, from a machine the block does not apply to, until the shop
+   * allowlists the crawler.
+   */
+  runsInCi: z.boolean().default(true),
   discovery: z
     .discriminatedUnion('kind', [
       z.object({ kind: z.literal('sitemap') }),
