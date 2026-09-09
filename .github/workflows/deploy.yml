@@ -58,10 +58,17 @@ jobs:
       - name: Report bundle size
         working-directory: apps/web
         run: |
-          echo "### Workers bundle" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          ls -lh .open-next/worker.js | awk '{print "worker.js  " $5}' >> "$GITHUB_STEP_SUMMARY"
-          gzip -c .open-next/worker.js | wc -c \
-            | awk '{printf "gzipped    %.2f MB\n", $1/1048576}' >> "$GITHUB_STEP_SUMMARY"
-          du -sh .open-next/assets | awk '{print "assets     " $1}' >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # Written to the log as well as the run summary. A number that exists only in
+          # the summary cannot be read back from a finished run without a browser.
+          {
+            ls -lh .open-next/worker.js | awk '{print "worker.js  " $5}'
+            gzip -c .open-next/worker.js | wc -c \
+              | awk '{printf "gzipped    %.2f MB  (free-tier ceiling: 3 MB)\n", $1/1048576}'
+            du -sh .open-next/assets | awk '{print "assets     " $1}'
+          } | tee bundle-size.txt
+          {
+            echo "### Workers bundle"
+            echo '```'
+            cat bundle-size.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
