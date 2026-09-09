@@ -1,6 +1,6 @@
 import type { ParsedOffer, RawSize } from '@tike/contracts';
 import { describe, expect, it } from 'vitest';
-import { cleanModel, normalizeOffer, NormalizationError } from './normalize';
+import { cleanModel, normalizeOffer, titleCase, NormalizationError } from './normalize';
 
 const size = (over: Partial<RawSize> = {}): RawSize => ({
   raw: '8',
@@ -29,16 +29,84 @@ const offer = (over: Partial<ParsedOffer> = {}): ParsedOffer => ({
 });
 
 describe('cleanModel', () => {
-  it('strips the brand wherever it appears, not only at the start', () => {
-    expect(cleanModel('Nike Patike NIKE DUNK LOW RETRO', 'Nike')).toBe('DUNK LOW RETRO');
+  it('strips the brand as many times as it prefixes the name', () => {
+    expect(cleanModel('Nike Patike NIKE DUNK LOW RETRO', 'Nike')).toBe('Dunk Low Retro');
   });
 
   it('strips category noise', () => {
-    expect(cleanModel('adidas Patike HANDBALL SPEZIAL W', 'adidas')).toBe('HANDBALL SPEZIAL W');
+    expect(cleanModel('adidas Patike HANDBALL SPEZIAL W', 'adidas')).toBe('Handball Spezial W');
   });
 
   it('copes with a missing brand', () => {
-    expect(cleanModel('Patike RUNNER 5', null)).toBe('RUNNER 5');
+    expect(cleanModel('Patike RUNNER 5', null)).toBe('Runner 5');
+  });
+
+  it('leaves a shop that already capitalises sensibly alone', () => {
+    expect(cleanModel('Jordan Patike Air Jordan 1 Zoom Air', 'Jordan')).toBe(
+      'Air Jordan 1 Zoom Air',
+    );
+  });
+
+  // Đak states the audience in every title. It is already a column and a filter chip.
+  it.each([
+    ['NIKE PATIKE AIR PRESTO ZA MUŠKARCE', 'NIKE', 'Air Presto'],
+    ['SKECHERS PATIKE UNO ŽENE', 'SKECHERS', 'Uno'],
+    ['NIKE PATIKE AIR MAX MOTIF ZA DEČAKE', 'NIKE', 'Air Max Motif'],
+    ['PUMA PATIKE KARMEN II JR DJEVOJČICE', 'PUMA', 'Karmen II JR'],
+    ['CONVERSE PATIKE RUN STAR MOTION CX PATIKE UNISEX', 'CONVERSE', 'Run Star Motion CX'],
+    ['ADIDAS PATIKE SAMBA ZA DECAKE', 'ADIDAS', 'Samba'],
+    ['NEW BALANCE PATIKE 9060 ZA ŽENE', 'NEW BALANCE', '9060'],
+  ])('drops the audience from %s', (title, brand, expected) => {
+    expect(cleanModel(title, brand)).toBe(expected);
+  });
+
+  // Five titles reached the database mojibaked, with the Č replaced by a question mark.
+  it('drops an audience word whose diacritic did not survive the shop', () => {
+    expect(cleanModel('NIKE PATIKE AIR MAX NOVA ZA DE?AKE', 'NIKE')).toBe('Air Max Nova');
+  });
+
+  it('drops an age band', () => {
+    expect(cleanModel('ADIDAS PATIKE GRAND COURT DJEČACI UZRASTA 0-4 GODINE', 'ADIDAS')).toBe(
+      'Grand Court',
+    );
+  });
+
+  /*
+   * The whole title is brand, category and audience — there is no model in it at all.
+   * Stripping everything used to leave "ZA MUŠKARCE" standing as the name.
+   */
+  it('falls back to the category word rather than an empty name', () => {
+    expect(cleanModel('REPLAY PATIKE ZA MUŠKARCE', 'REPLAY')).toBe('Patike');
+  });
+
+  it('never returns an empty string', () => {
+    expect(cleanModel('PATIKE', 'PATIKE')).not.toBe('');
+  });
+});
+
+describe('titleCase', () => {
+  it('leaves a name that is not shouting untouched', () => {
+    expect(titleCase('Air Jordan 1 Zoom Air')).toBe('Air Jordan 1 Zoom Air');
+    expect(titleCase('New Balance U327L')).toBe('New Balance U327L');
+  });
+
+  it('lowers a shouted name', () => {
+    expect(titleCase('HEART LIGHTS - BUBBLE LOVE')).toBe('Heart Lights - Bubble Love');
+  });
+
+  // A code read as a word ("Nike Air Max Tf") is worse than leaving the name shouting.
+  it.each([
+    ['AIR MAX 90', 'Air Max 90'],
+    ['VAPOR 16 CLUB TF', 'Vapor 16 Club TF'],
+    ['TERREX AX4 GTX', 'Terrex AX4 GTX'],
+    ['RS-X HI', 'RS-X HI'],
+    ['KARMEN II', 'Karmen II'],
+    ['GRAND COURT 3.0', 'Grand Court 3.0'],
+    ["BLAZER MID '77 JUMBO", "Blazer Mid '77 Jumbo"],
+    ['W NIKE PACIFIC', 'W Nike Pacific'],
+    ['E-SERIES AD', 'E-Series AD'],
+  ])('keeps the codes in %s', (input, expected) => {
+    expect(titleCase(input)).toBe(expected);
   });
 });
 
@@ -114,7 +182,9 @@ describe('normalizeOffer', () => {
   });
 
   it('builds a diacritic-folded search document', () => {
-    const result = normalizeOffer(offer({ title: 'Nike Patike MUŠKE ZOOM', brand: 'Nike' }));
-    expect(result.searchDoc).toContain('muske zoom');
+    const result = normalizeOffer(
+      offer({ title: 'Nike Patike GEL-KAYANO ČIŠĆENJE', brand: 'Nike' }),
+    );
+    expect(result.searchDoc).toContain('gel-kayano ciscenje');
   });
 });
