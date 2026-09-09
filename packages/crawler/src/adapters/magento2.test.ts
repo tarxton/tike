@@ -39,6 +39,34 @@ describe('parseMagento2', () => {
     expect(offer.sku).toBe('398878-01');
   });
 
+  /*
+   * The title parse put the model into the brand on roughly one Đak listing in fifty,
+   * because it assumed the brand always precedes the word PATIKE. Twenty-one invented
+   * brands reached the brand filter that way — "ZENSKE NIKE AIR MAX 1" among them.
+   */
+  it('prefers the shop attribute over the title, which puts the model first sometimes', () => {
+    const modelFirst = load('01-in-stock.html').replace(
+      'PUMA PATIKE PUMA KARMEN II JR DJEVOJČICE',
+      'PUMA MUSKE RS-X HI PATIKE ZA MUŠKARCE',
+    );
+    expect(parseMagento2(modelFirst, IN_STOCK).brand).toBe('PUMA');
+
+    // And what the title alone would have made of it, which is the bug being fixed.
+    const withoutAttribute = modelFirst.replace('var productBrand = "PUMA";', '');
+    expect(parseMagento2(withoutAttribute, IN_STOCK).brand).toBe('PUMA MUSKE RS-X HI');
+  });
+
+  it('falls back to the title when the page carries no brand attribute', () => {
+    const noAttribute = load('01-in-stock.html').replace('var productBrand = "PUMA";', '');
+    expect(parseMagento2(noAttribute, IN_STOCK).brand).toBe('PUMA');
+  });
+
+  it('reads the audience from the shop attribute', () => {
+    // The attribute states it outright: MUŠKARCI, ŽENE, DJEVOJČICE, DEČACI, BEBE.
+    const menAttribute = load('01-in-stock.html').replace('DJEVOJČICE";', 'MUŠKARCI";');
+    expect(parseMagento2(menAttribute, IN_STOCK).gender).toBe('men');
+  });
+
   it('reads the audience out of the title', () => {
     expect(parseMagento2(load('01-in-stock.html'), IN_STOCK).gender).toBe('kids');
     expect(parseMagento2(load('03-in-stock.html'), ADIDAS).gender).toBe('women');

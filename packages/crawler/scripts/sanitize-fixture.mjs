@@ -177,8 +177,21 @@ export function sanitizeMagento2Fixture(html) {
     }
   }
 
+  // The shop's own brand and audience attributes, rebuilt from the two values the parser
+  // reads. The block they live in on the real page is a size-chart widget with a hundred
+  // lines of jQuery around them; copying it would carry all of that into the repository
+  // for two strings.
+  const shopAttributes = ['productBrand', 'productGender']
+    .map((name) => {
+      const found = html.match(new RegExp(`var\\s+${name}\\s*=\\s*"([^"]*)"`));
+      return found ? `var ${name} = ${JSON.stringify(found[1])};` : null;
+    })
+    .filter(Boolean)
+    .join('\n');
+
   return [
     heading,
+    shopAttributes ? `<script>\n${shopAttributes}\n</script>` : '',
     `<script type="text/x-magento-init">${JSON.stringify(swatch)}</script>`,
     galleryBlock,
   ]

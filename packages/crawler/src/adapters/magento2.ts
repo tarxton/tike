@@ -31,6 +31,10 @@ import { ParseError, UnavailableError } from '../errors';
  * 3. **The DOM's prices cannot be trusted.** `data-price-amount` appears on the related
  *    products carousel too, and on one sampled page the second and third values belonged
  *    to a different shoe entirely. Prices are read from `jsonConfig` only.
+ *
+ * 4. **Brand and audience are published as attributes**, in the small script that drives
+ *    the shop's own size-chart widget. Reading them beats reading the title, which is
+ *    what this adapter did first — see `extractBrand`.
  */
 
 interface OptionPrice {
@@ -87,7 +91,42 @@ function attributeList(attributes: JsonConfig['attributes']): SwatchAttribute[] 
 }
 
 /**
+ * One of the shop's own product attributes, from the script behind its size-chart widget:
+ *
+ *   var productBrand = "NIKE";
+ *   var productGender = "MUŠKARCI";
+ *
+ * Worth preferring over anything read out of the title. The title parse below assumed the
+ * brand always comes before the word "PATIKE", and roughly one Đak title in fifty puts
+ * the model there instead — "NIKE MUSKE AIR MAX FLYKNIT RACER PATIKE ZA MUŠKARCE" gave a
+ * brand of "NIKE MUSKE AIR MAX FLYKNIT RACER" and left the model as the literal string
+ * "ZA MUŠKARCE". That put 21 invented brands into the brand filter.
+ */
+function pageAttribute(html: string, name: string): string | null {
+  const match = html.match(new RegExp(`var\\s+${name}\\s*=\\s*"([^"]*)"`));
+  return match?.[1]?.trim() || null;
+}
+
+/**
+ * The shop's audience attribute, on tike's four-value scale.
+ *
+ * Children first, as in `extractGender`: mislabelling a child's shoe is what puts a
+ * toddler size in front of someone filtering 44.
+ */
+function genderFromAttribute(raw: string | null): Gender | null {
+  if (!raw) return null;
+  const t = raw.toLowerCase();
+  if (/(d[j]?e[cč](a|ij|ak|ac)|d[j]?evoj[cč]|beb)/.test(t)) return 'kids';
+  if (/[zž]en/.test(t)) return 'women';
+  if (/mu[sš]k/.test(t)) return 'men';
+  if (/unisex/.test(t)) return 'unisex';
+  return null;
+}
+
+/**
  * The brand, taken as everything before the word "PATIKE" in the title.
+ *
+ * The fallback for a page that carries no `productBrand`, not the first choice.
  *
  * Djak titles are built as "<BRAND> PATIKE <MODEL> <AUDIENCE>": "NIKE PATIKE AIR PRESTO
  * ZA MUŠKARCE", "PUMA PATIKE PUMA KARMEN II JR DJEVOJČICE". Taking the first word alone
@@ -188,7 +227,7 @@ export function parseMagento2(html: string, url: string): ParsedOffer {
     url,
     externalId,
     title,
-    brand: extractBrand(title),
+    brand: pageAttribute(html, 'productBrand') ?? extractBrand(title),
     // The manufacturer style code lives in the URL slug rather than any field on the
     // page: ".../puma-patike-puma-karmen-ii-jr-djevojcice-398878-01". It is what tier-2
     // matching joins on, so it is worth taking from the only place it appears.
@@ -199,7 +238,7 @@ export function parseMagento2(html: string, url: string): ParsedOffer {
     // products, which would otherwise put the whole shop on sale at 0% off.
     originalPriceRaw: oldPrice !== undefined && oldPrice > finalPrice ? oldPrice.toFixed(2) : null,
     currency: 'BAM' as const,
-    gender: extractGender(title),
+    gender: genderFromAttribute(pageAttribute(html, 'productGender')) ?? extractGender(title),
     sizes,
   };
 
