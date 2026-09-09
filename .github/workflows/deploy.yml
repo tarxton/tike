@@ -1,0 +1,67 @@
+name: Deploy
+
+# Right now this only proves the app can be built for Cloudflare Workers. Deploying it
+# needs a Cloudflare API token and a decision about going public, so the deploy job is
+# deliberately absent rather than present and skipped: a job that never runs still reads
+# as if the pipeline exists.
+#
+# §12 named "OpenNext does not cleanly support Next.js 16 on Workers" as the project's
+# top risk and asked for this check before anything was built on the assumption. It
+# arrives late — five shops and a full UI late — so it is worth running properly.
+#
+# It runs on Linux because the build cannot run on the developer's machine at all:
+# OpenNext's tracing step creates symlinks, and Windows refuses those without Developer
+# Mode or elevation. That is a workstation permission, not an adapter limitation, and CI
+# is the environment that would deploy regardless.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build for Workers
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # No database URL on purpose. Every route in this app is server-rendered on demand,
+      # so a build that needs a live database is a build that has accidentally moved work
+      # into prerendering — and this is the cheapest place to notice that.
+      - name: Build the Workers bundle
+        working-directory: apps/web
+        run: pnpm exec opennextjs-cloudflare build
+
+      # A Worker has a hard size ceiling (3 MB gzipped on the free plan), and the number
+      # only ever grows. Printing it every run means the day it becomes a problem is a
+      # number in a log rather than a failed deploy.
+      - name: Report bundle size
+        working-directory: apps/web
+        run: |
+          echo "### Workers bundle" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ls -lh .open-next/worker.js | awk '{print "worker.js  " $5}' >> "$GITHUB_STEP_SUMMARY"
+          gzip -c .open-next/worker.js | wc -c \
+            | awk '{printf "gzipped    %.2f MB\n", $1/1048576}' >> "$GITHUB_STEP_SUMMARY"
+          du -sh .open-next/assets | awk '{print "assets     " $1}' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

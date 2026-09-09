@@ -12,6 +12,10 @@ allowBuilds:
   # developer machine that happens to have a copy already and fails on a clean runner.
   sharp: true
   unrs-resolver: false
+  # workerd is the Cloudflare Workers runtime. Its install script fetches the platform
+  # binary that `opennextjs-cloudflare build` and `wrangler dev` both execute against;
+  # without it the adapter has nothing to run the built worker on.
+  workerd: true
 
 # Transitive packages pinned past an advisory.
 #
