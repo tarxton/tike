@@ -341,6 +341,32 @@ export const imageCache = pgTable(
   (t) => [index('image_cache_key_idx').on(t.key)],
 );
 
+/**
+ * Every slug a product has ever answered to.
+ *
+ * Matching derives its answer from the current catalogue rather than accumulating it, so
+ * a product row is deleted and rebuilt on every run. The slug used to be rebuilt with it
+ * — `brand-model-leadOfferId` — which meant it moved whenever the model name improved or
+ * a different member of the cluster became the lead. Improving `cleanModel` once rewrote
+ * most slugs in the catalogue at a stroke.
+ *
+ * Now the slug is carried forward, and this table holds the ones it has left behind so a
+ * link shared before a rename still resolves. Rows are only ever added: a slug that has
+ * been public once has to keep working, whatever later happens to the product it named.
+ */
+export const productSlugAlias = pgTable(
+  'product_slug_alias',
+  {
+    /** The old slug. Primary key, because a slug names one product at a time. */
+    slug: text('slug').primaryKey(),
+    productId: integer('product_id')
+      .notNull()
+      .references(() => product.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('product_slug_alias_product_idx').on(t.productId)],
+);
+
 export const searchMiss = pgTable(
   'search_miss',
   {

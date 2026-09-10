@@ -25,7 +25,7 @@ import {
   type MatchMethod,
   type MatchResult,
 } from '@tike/core';
-import { brand as brandTable, offer, product, withDb } from '@tike/db';
+import { brand as brandTable, offer, product, productSlugAlias, withDb } from '@tike/db';
 
 const dryRun = process.argv.includes('--dry-run');
 
@@ -288,15 +288,26 @@ await withDb(async (db) => {
   // Products carrying a reviewed decision in product_alias are kept: those encode a human
   // judgement, which this job has no business discarding.
   const written = await db.transaction(async (tx) => {
+    /*
+     * Which slug each offer's product answered to before this run.
+     *
+     * Read before anything is cleared, because it is the only way a rebuilt cluster can
+     * find out what it used to be called. A slug that has been public once has to keep
+     * working: it is in somebody's history, a message, or eventually an index.
+     */
+    const priorRows = (
+      await tx.execute(sql`
+        select o.id as "offerId", p.slug as "slug"
+        from offer o join product p on p.id = o.product_id
+        where o.product_id is not null
+      `)
+    ).rows as { offerId: number; slug: string }[];
+    const priorSlugOf = new Map(priorRows.map((r) => [Number(r.offerId), String(r.slug)]));
+
     await tx
       .update(offer)
       .set({ productId: null, matchMethod: null, matchConfidence: null })
       .where(sql`product_id is not null`);
-
-    const removed = await tx
-      .delete(product)
-      .where(sql`not exists (select 1 from product_alias a where a.product_id = product.id)`)
-      .returning({ id: product.id });
 
     // Brands in one statement rather than one per brand.
     //
@@ -344,8 +355,32 @@ await withDb(async (db) => {
             x.model.length - y.model.length,
         );
       const lead = members[0]!;
-      const slug = `${slugify([lead.brand, lead.model].filter(Boolean).join(' '))}-${lead.offerId}`;
-      return { members, lead, slug };
+
+      /*
+       * Keep the name this cluster already had, rather than deriving a new one.
+       *
+       * Whichever slug most of its members carried last run wins, so a cluster that
+       * gained or lost an offer keeps its identity. Only a genuinely new shoe is minted,
+       * and it is minted from the *lowest* offer id in the group rather than the lead's:
+       * the lead is whichever member has the shortest model name, which changes whenever
+       * a shop edits a title, while the lowest id is the offer tike saw first and does
+       * not move.
+       */
+      const votes = new Map<string, number>();
+      for (const m of members) {
+        const prior = priorSlugOf.get(m.offerId);
+        if (prior) votes.set(prior, (votes.get(prior) ?? 0) + 1);
+      }
+      const inherited = [...votes.entries()].sort(
+        (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+      )[0]?.[0];
+      const anchor = Math.min(...members.map((m) => m.offerId));
+      const slug =
+        inherited ?? `${slugify([lead.brand, lead.model].filter(Boolean).join(' '))}-${anchor}`;
+
+      // Any other slug these offers used to answer to now redirects here.
+      const superseded = [...votes.keys()].filter((v) => v !== slug);
+      return { members, lead, slug, superseded };
     });
 
     const savedProducts: { id: number; slug: string }[] = [];
@@ -365,7 +400,20 @@ await withDb(async (db) => {
             ),
           })),
         )
-        .onConflictDoUpdate({ target: product.slug, set: { model: sql`excluded.model` } })
+        // Every derived column, because the row now survives the run rather than being
+        // rebuilt. Updating only the model would have left a product's brand, style code,
+        // gender and hero frozen at whatever they were the first time it appeared.
+        .onConflictDoUpdate({
+          target: product.slug,
+          set: {
+            brandId: sql`excluded.brand_id`,
+            model: sql`excluded.model`,
+            styleCode: sql`excluded.style_code`,
+            gender: sql`excluded.gender`,
+            heroImageUrl: sql`excluded.hero_image_url`,
+            searchDoc: sql`excluded.search_doc`,
+          },
+        })
         .returning({ id: product.id, slug: product.slug });
       savedProducts.push(...rows);
     }
@@ -398,9 +446,53 @@ await withDb(async (db) => {
       `);
     }
 
-    return { cleared: removed.length, products: savedProducts.length, offers: assignments.length };
+    /*
+     * Slugs these clusters have outgrown, pointed at where they went.
+     *
+     * A cluster picks up a second slug when two products merge into one — both halves
+     * were public under their own name, and the loser has to keep resolving.
+     */
+    const aliasRows = planned.flatMap(({ slug, superseded }) => {
+      const productId = idBySlug.get(slug);
+      if (productId === undefined) return [];
+      return superseded.map((old) => ({ slug: old, productId }));
+    });
+    for (const batch of chunks(aliasRows, WRITE_CHUNK)) {
+      await tx
+        .insert(productSlugAlias)
+        .values(batch)
+        // Re-point rather than ignore: a merged product can merge again later, and an
+        // alias frozen at its first target would send readers to a page that moved on.
+        .onConflictDoUpdate({
+          target: productSlugAlias.slug,
+          set: { productId: sql`excluded.product_id` },
+        });
+    }
+
+    /*
+     * Products nothing points at any more.
+     *
+     * Rows persist across runs now, so a shoe that leaves every catalogue would otherwise
+     * sit here forever. Reviewed decisions in `product_alias` are exempt, as before — this
+     * job has no business discarding a human judgement.
+     */
+    const removed = await tx
+      .delete(product)
+      .where(
+        sql`not exists (select 1 from offer o where o.product_id = product.id)
+            and not exists (select 1 from product_alias a where a.product_id = product.id)`,
+      )
+      .returning({ id: product.id });
+
+    return {
+      retired: removed.length,
+      aliases: aliasRows.length,
+      products: savedProducts.length,
+      offers: assignments.length,
+    };
   });
 
-  console.log(`cleared ${written.cleared} previously derived products`);
   console.log(`wrote ${written.products} products over ${written.offers} offers`);
+  console.log(`kept ${written.aliases} old slugs redirecting`);
+  console.log(`retired ${written.retired} products no shop carries any more`);
 });
