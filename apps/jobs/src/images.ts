@@ -1,10 +1,9 @@
-import { createHash } from 'node:crypto';
-import sharp from 'sharp';
 import { sql } from 'drizzle-orm';
 import { imageCache, withDb } from '@tike/db';
 import { PoliteFetcher } from '@tike/crawler';
 import { crawlConfigSchema } from '@tike/contracts';
 import { putObject, r2Client, readR2Config, R2NotConfiguredError } from './r2';
+import { normalizeImage, objectKey } from './normalize-image';
 
 /**
  * Copy product images into our own storage.
@@ -23,9 +22,6 @@ import { putObject, r2Client, readR2Config, R2NotConfiguredError } from './r2';
  * job only ever asks for URLs it has no record of.
  */
 
-/** Wide enough for a card at 2x on a phone, which is the largest place one is shown. */
-const WIDTH = 640;
-const QUALITY = 80;
 /**
  * Everything outstanding, unless asked otherwise.
  *
@@ -43,11 +39,6 @@ const DEFAULT_LIMIT = Number.MAX_SAFE_INTEGER;
  * legible and makes one retailer's images removable in one operation, which is what an
  * opt-out or a takedown request actually needs.
  */
-export function objectKey(shopSlug: string, sourceUrl: string): string {
-  const hash = createHash('sha256').update(sourceUrl).digest('hex').slice(0, 32);
-  return `products/${shopSlug}/${hash}.webp`;
-}
-
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const limitArg = args.find((a) => a.startsWith('--limit='));
@@ -140,17 +131,14 @@ async function main(): Promise<void> {
           // fetching a file once so that readers stop being sent to the shop for it. The
           // identifying User-Agent is the crawler's.
           const input = Buffer.from(await fetcher.getBinary(row.sourceUrl));
-          const output = await sharp(input)
-            // `withoutEnlargement` so a small original is stored at its own size rather
-            // than upscaled into a blurry copy of itself.
-            .resize({ width: WIDTH, withoutEnlargement: true })
-            .webp({ quality: QUALITY })
-            .toBuffer({ resolveWithObject: true });
+          // One rendition for every shop — see normalize-image.ts for why the shop's own
+          // backdrop is discarded rather than kept.
+          const output = await normalizeImage(input);
 
           if (dryRun || !client || !config) {
             console.log(
-              `  would store ${key} (${Math.round(output.info.size / 1024)}kB, ` +
-                `${output.info.width}x${output.info.height})`,
+              `  would store ${key} (${Math.round(output.bytes / 1024)}kB, ` +
+                `${output.width}x${output.height})`,
             );
             stored += 1;
             continue;
@@ -162,9 +150,9 @@ async function main(): Promise<void> {
             .values({
               sourceUrl: row.sourceUrl,
               key,
-              width: output.info.width,
-              height: output.info.height,
-              bytes: output.info.size,
+              width: output.width,
+              height: output.height,
+              bytes: output.bytes,
             })
             .onConflictDoNothing();
           stored += 1;
