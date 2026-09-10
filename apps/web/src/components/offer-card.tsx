@@ -46,8 +46,19 @@ function CardLink({
     'flex flex-1 flex-col focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none';
 
   if (offer.productSlug !== null) {
+    // The visitor's sizes ride along in the link.
+    //
+    // The product page used to learn them from a cookie, which is what made the whole
+    // site remember a selection across visits. With that gone the sizes have to travel
+    // the way every other filter here does — in the URL — or the page cannot say which
+    // shop lacks your size, and the colourway shelf stops being filtered to sizes you
+    // can actually buy.
+    const href =
+      sizes.length > 0
+        ? `/patika/${offer.productSlug}?velicina=${sizes.join(',')}`
+        : `/patika/${offer.productSlug}`;
     return (
-      <Link href={`/patika/${offer.productSlug}`} className={className}>
+      <Link href={href} className={className}>
         {children}
       </Link>
     );

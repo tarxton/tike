@@ -1,23 +1,7 @@
 'use server';
 
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { parseSizes } from './sizes';
-
-const COOKIE = 'tike_sizes';
-const ONE_YEAR = 60 * 60 * 24 * 365;
-
-/**
- * The selection lives in a cookie rather than client state so the server renders
- * already-filtered results on the first paint. Size-first is the product thesis;
- * making the user wait for a client round trip to apply it would undercut that.
- *
- * Multiple sizes are supported because plenty of people fit two — 45 and 46 both
- * work, and they want to see either.
- */
-export async function getSizes(): Promise<number[]> {
-  return parseSizes((await cookies()).get(COOKIE)?.value);
-}
 
 /**
  * Apply the whole filter form at once: the typed query and every ticked size.
@@ -25,19 +9,22 @@ export async function getSizes(): Promise<number[]> {
  * Sizes and the search box live in one form on purpose. When they were separate,
  * clicking a size submitted the size form and threw away text the user had already
  * typed — so "dunk" plus size 44 searched only for size 44.
+ *
+ * The selection goes into the URL and nowhere else. It used to be mirrored into a
+ * year-long `tike_sizes` cookie so that the server could render already-filtered results
+ * on a first paint — but that also meant every later visit opened pre-filtered to
+ * whatever was picked weeks ago, with no visible cause and nothing in the address bar to
+ * explain it. Someone who filtered to 44 once saw a permanently smaller catalogue.
+ *
+ * A URL still renders filtered on the first paint, so nothing was actually bought with
+ * that cookie; and it makes the size behave like every other filter here — shareable,
+ * back-button-correct, and gone when you leave.
  */
 export async function applyFilters(formData: FormData): Promise<void> {
   const sizes = parseSizes(formData.getAll('velicina').join(','));
   const query = String(formData.get('q') ?? '').trim();
   const brand = String(formData.get('brend') ?? '').trim();
   const showKids = formData.get('djecije') === '1';
-
-  const jar = await cookies();
-  if (sizes.length > 0) {
-    jar.set(COOKIE, sizes.join(','), { maxAge: ONE_YEAR, sameSite: 'lax', path: '/' });
-  } else {
-    jar.delete(COOKIE);
-  }
 
   const params = new URLSearchParams();
   if (sizes.length > 0) params.set('velicina', sizes.join(','));
@@ -47,19 +34,4 @@ export async function applyFilters(formData: FormData): Promise<void> {
 
   const qs = params.toString();
   redirect(qs ? `/patike?${qs}` : '/patike');
-}
-
-/**
- * Clear every filter, including the stored sizes.
- *
- * Must be an action, not a link: a link only clears the URL, and the page falls back to
- * the cookie, so the filters reappear and the button looks broken.
- *
- * Returns to the page it was pressed on rather than jumping to results — on the home
- * page, clearing a selection should not run a search.
- */
-export async function clearFilters(formData: FormData): Promise<void> {
-  (await cookies()).delete(COOKIE);
-  const returnTo = String(formData.get('returnTo') ?? '/patike');
-  redirect(returnTo === '/' ? '/' : '/patike');
 }

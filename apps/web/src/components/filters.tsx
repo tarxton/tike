@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ModelSearch } from './model-search';
 import { formatSize, t } from '@/lib/messages';
-import { applyFilters, clearFilters } from '@/lib/size';
+import { applyFilters } from '@/lib/size';
 import { ADULT_MIN_SIZE } from '@/lib/sizes';
 
 /**
@@ -47,7 +47,6 @@ export function Filters({
     <form action={applyFilters} className={compact ? 'space-y-3' : 'space-y-5'}>
       {showKids ? <input type="hidden" name="djecije" value="1" /> : null}
       {brands.length > 0 ? <input type="hidden" name="brend" value={brands.join(',')} /> : null}
-      <input type="hidden" name="returnTo" value={returnTo} />
 
       <ModelSearch defaultValue={query} />
 
@@ -84,15 +83,15 @@ export function Filters({
         </button>
 
         {selected.length > 0 || query ? (
-          // formAction, so this submits the same form to a different action and can
-          // clear the stored sizes as well as the URL.
-          <button
-            type="submit"
-            formAction={clearFilters}
+          // A plain link now. It had to be a server action while a cookie held the
+          // sizes, because clearing only the URL left the cookie to put them straight
+          // back and the button looked broken. With no cookie, the URL is the state.
+          <Link
+            href={returnTo === '/' ? '/' : '/patike'}
             className="text-sm text-neutral-600 underline underline-offset-4 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             {t.clearFilters}
-          </button>
+          </Link>
         ) : null}
 
         {kidsCount > 0 ? (
