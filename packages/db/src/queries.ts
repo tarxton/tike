@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import { db } from './client';
 
 /**
@@ -390,15 +390,25 @@ const FUZZY_THRESHOLD = 0.4;
  */
 const R2_PUBLIC_BASE = (process.env.R2_PUBLIC_BASE_URL ?? '').replace(/\/$/, '');
 
-const cachedImageUrl = R2_PUBLIC_BASE
-  ? sql`(
+/**
+ * Takes the source column rather than assuming one.
+ *
+ * It used to be a constant bound to `o.image_url`, which meant the product page's own
+ * `p.hero_image_url` had no lookup at all and was served straight from the retailer. Đak
+ * hotlink-protects its images — a foreign referer gets a 403, which is exactly what a
+ * browser sends — so every Đak product page rendered a broken hero while the colourway
+ * cards below it, which go through the search query, were fine.
+ */
+const cachedImageUrl = (source: SQL) =>
+  R2_PUBLIC_BASE
+    ? sql`(
       select ${R2_PUBLIC_BASE} || '/' || c.key
       from image_cache c
-      where c.source_url = o.image_url and c.error is null
+      where c.source_url = ${source} and c.error is null
     )`
-  : // Nothing stored anywhere yet, so every image is the shop's own. Written as a literal
-    // null so the coalesce around it still type-checks and the query plan is unchanged.
-    sql`null`;
+    : // Nothing stored anywhere yet, so every image is the shop's own. Written as a literal
+      // null so the coalesce around it still type-checks and the query plan is unchanged.
+      sql`null`;
 
 /** The title folded to letters, digits and spaces — what trigram matching compares. */
 const spacedTitle = sql`regexp_replace(unaccent(lower(o.title)), '[^a-z0-9 ]', ' ', 'g')`;
@@ -589,7 +599,7 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
         -- Coalesced here rather than in the app so every reader gets it: a card that
         -- hotlinks is a request on a retailer's server per page view, and for Djak, whose
         -- images are served only to its own pages, it is a broken image.
-        coalesce(${cachedImageUrl}, o.image_url) as image_url,
+        coalesce(${cachedImageUrl(sql`o.image_url`)}, o.image_url) as image_url,
         o.price_minor, o.original_price_minor, o.currency, o.first_seen_at,
         s.slug as shop_slug, s.name as shop_name, s.logo_url as shop_logo,
         -- Matched offers collapse onto their product; unmatched ones stay their own
@@ -869,7 +879,8 @@ export async function productBySlug(slug: string): Promise<ProductDetail | null>
       b.name            as "brand",
       p.style_code      as "styleCode",
       p.gender::text    as "gender",
-      p.hero_image_url  as "heroImageUrl",
+      coalesce(${cachedImageUrl(sql`p.hero_image_url`)}, p.hero_image_url)
+        as "heroImageUrl",
       ${familyKey}      as "familyKey"
     from product p
     left join brand b on b.id = p.brand_id
