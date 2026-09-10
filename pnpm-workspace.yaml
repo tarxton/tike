@@ -12,6 +12,10 @@ allowBuilds:
   # developer machine that happens to have a copy already and fails on a clean runner.
   sharp: true
   unrs-resolver: false
+  # workerd is the Cloudflare Workers runtime. Its install script fetches the platform
+  # binary that `opennextjs-cloudflare build` and `wrangler dev` both execute against;
+  # without it the adapter has nothing to run the built worker on.
+  workerd: true
 
 # Transitive packages pinned past an advisory.
 #
@@ -25,6 +29,11 @@ overrides:
   # drizzle-kit's deprecated @esbuild-kit shims, which pin an old esbuild; drizzle-kit is
   # already on its latest release, so an override is the only way to move it.
   'esbuild@<=0.24.2': '>=0.25.0'
+  # GHSA-rgj7-g3m4-5g8c - libheif vulnerabilities reachable through sharp's decoders.
+  # Comes in through wrangler's miniflare, which is the local Workers simulator and never
+  # ships; @tike/jobs already depends on a patched sharp directly, so this only drags the
+  # one stale transitive copy up to meet it.
+  'sharp@<0.35.4': '>=0.35.4'
 
 minimumReleaseAgeExclude:
   - lint-staged@17.4.1

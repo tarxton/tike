@@ -1,0 +1,157 @@
+name: Deploy
+
+# Builds the app for Cloudflare Workers on every PR, and deploys it from main.
+#
+# §12 named "OpenNext does not cleanly support Next.js 16 on Workers" as the project's
+# top risk and asked for this check before anything was built on the assumption. It
+# arrives late — five shops and a full UI late — so it is worth running properly.
+#
+# It runs on Linux because the build cannot run on the developer's machine at all:
+# OpenNext's tracing step creates symlinks, and Windows refuses those without Developer
+# Mode or elevation. That is a workstation permission, not an adapter limitation, and CI
+# is the environment that would deploy regardless.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build for Workers
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # No database URL on purpose. Every route in this app is server-rendered on demand,
+      # so a build that needs a live database is a build that has accidentally moved work
+      # into prerendering — and this is the cheapest place to notice that.
+      - name: Build the Workers bundle
+        working-directory: apps/web
+        run: pnpm exec opennextjs-cloudflare build
+
+      # A Worker has a hard size ceiling (3 MB gzipped on the free plan) and the number
+      # only ever grows, so the day it becomes a problem should be a line in a log rather
+      # than a failed deploy.
+      #
+      # The size comes from wrangler's own dry run, not from measuring a file. The first
+      # version of this step measured `.open-next/worker.js` and reported 2.3 KB, because
+      # that file is an entry shim and every byte that matters is in the chunks it pulls
+      # in — a check that would have read "0.00 MB" all the way to the ceiling.
+      - name: Report upload size
+        working-directory: apps/web
+        run: |
+          pnpm exec wrangler deploy --dry-run 2>&1 | tee dry-run.txt
+          {
+            echo "### Workers upload"
+            echo '```'
+            grep -iE "total upload|no bindings|your worker has" dry-run.txt || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy to Workers
+    needs: build
+    # Only from main, and only on a real push — a pull_request build must never publish.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Gate the token behind an environment so the first deploys can require a human.
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the Workers bundle
+        working-directory: apps/web
+        run: pnpm exec opennextjs-cloudflare build
+
+      - name: Deploy
+        id: deploy
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          pnpm exec wrangler deploy 2>&1 | tee deploy.txt
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.txt | head -1)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed to $url" >> "$GITHUB_STEP_SUMMARY"
+
+      # Runtime configuration lives on the Worker, not in the bundle.
+      #
+      # After the deploy, not before it. `wrangler secret bulk` targets a Worker that
+      # already exists, so on a first ever run the reverse order fails with "Worker not
+      # found" — and on the run after that it would have looked fine forever. Setting a
+      # secret publishes a new version of the Worker by itself, so the values are live
+      # before the smoke test asks the database anything.
+      #
+      # Pushed from CI rather than set by hand so GitHub stays the single source of truth:
+      # a value rotated in one place would otherwise keep working from the other until
+      # somebody noticed. `secret bulk` reads JSON on stdin, so no value reaches a log or
+      # a process argument.
+      #
+      # DATABASE_URL is the pooled HTTP URL deliberately. The site only reads, and per
+      # ADR-0001 reads go over HTTP; the WebSocket driver and the unpooled URL belong to
+      # the jobs runner, which does not run here.
+      - name: Push runtime secrets to the Worker
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          R2_PUBLIC_BASE_URL: ${{ vars.R2_PUBLIC_BASE_URL }}
+        run: |
+          jq -n \
+            --arg db "$DATABASE_URL" \
+            --arg r2 "$R2_PUBLIC_BASE_URL" \
+            '{DATABASE_URL: $db, R2_PUBLIC_BASE_URL: $r2}' \
+            | pnpm exec wrangler secret bulk
+
+      # A deploy that returns 200 on the homepage can still be serving an empty catalogue,
+      # so the smoke test asks for something only a working database can answer, and
+      # checks that the placeholder is refusing crawlers.
+      - name: Smoke test
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          test -n "$URL"
+          echo "smoke: $URL"
+
+          code=$(curl -sS -o home.html -w '%{http_code}' --retry 5 --retry-all-errors --retry-delay 3 "$URL/")
+          test "$code" = "200" || { echo "homepage returned $code"; exit 1; }
+
+          code=$(curl -sS -o results.html -w '%{http_code}' "$URL/patike?velicina=44")
+          test "$code" = "200" || { echo "/patike returned $code"; exit 1; }
+          grep -q 'rezultat' results.html || { echo "no results rendered - database unreachable?"; exit 1; }
+
+          # The placeholder must not be indexable.
+          curl -sS "$URL/robots.txt" | grep -q 'Disallow: /' \
+            || { echo "robots.txt is not disallowing on the placeholder host"; exit 1; }
+
+          echo "homepage, results and robots all healthy"

@@ -30,3 +30,6 @@ pnpm-debug.log*
 # Crawler scratch output — fixtures are committed, raw dumps are not
 scratch/
 *.raw.html
+
+# OpenNext build output
+.open-next/

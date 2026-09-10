@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tike-web",
+  "main": ".open-next/worker.js",
+  // Pinned rather than floating: the compatibility date is what decides which Workers
+  // runtime semantics the deployed worker gets, so letting it drift would change the
+  // platform under a build that was never re-tested on it.
+  "compatibility_date": "2026-09-10",
+  // `nodejs_compat` is required by the adapter, not optional — Next's server code reaches
+  // for node: builtins that Workers only exposes with this flag on.
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS",
+  },
+  "observability": {
+    "enabled": true,
+  },
+}
