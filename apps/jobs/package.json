@@ -15,7 +15,9 @@
     "check-env": "tsx --env-file=../../.env.local src/check-env.ts",
     "check-env:ci": "tsx src/check-env.ts",
     "crawl:ci": "tsx src/crawl.ts",
-    "match:ci": "tsx src/match.ts"
+    "match:ci": "tsx src/match.ts",
+    "renormalize": "tsx --env-file=../../.env.local src/renormalize-images.ts",
+    "renormalize:ci": "tsx src/renormalize-images.ts"
   },
   "dependencies": {
     "@tike/contracts": "workspace:*",
