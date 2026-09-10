@@ -17,7 +17,8 @@
     "crawl:ci": "tsx src/crawl.ts",
     "match:ci": "tsx src/match.ts",
     "renormalize": "tsx --env-file=../../.env.local src/renormalize-images.ts",
-    "renormalize:ci": "tsx src/renormalize-images.ts"
+    "renormalize:ci": "tsx src/renormalize-images.ts",
+    "sweep": "tsx --env-file=../../.env.local src/sweep-renditions.ts"
   },
   "dependencies": {
     "@tike/contracts": "workspace:*",
