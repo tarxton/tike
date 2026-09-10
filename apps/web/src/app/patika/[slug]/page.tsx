@@ -4,7 +4,7 @@ import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { productBySlug, searchOffers, type ProductOffer } from '@tike/db';
 import { formatPrice, formatSize, pluralShops, seeAllColourways, t } from '@/lib/messages';
-import { getSizes } from '@/lib/size';
+import { parseSizes } from '@/lib/sizes';
 import { OfferCard } from '@/components/offer-card';
 import { ShopLogo } from '@/components/shop-logo';
 
@@ -61,13 +61,20 @@ export function backHref(referer: string | null): string {
   return '/patike';
 }
 
-export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const [product, selected, requestHeaders] = await Promise.all([
-    productBySlug(slug),
-    getSizes(),
-    headers(),
-  ]);
+export default async function ProductPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const [{ slug }, query] = await Promise.all([params, searchParams]);
+  // Carried in the link from the card that got here, rather than read from a cookie.
+  // A product page opened cold simply does not know the visitor's size, which is the
+  // honest answer: nothing on that page has told it.
+  const raw = query.velicina;
+  const selected = parseSizes(Array.isArray(raw) ? raw[0] : raw);
+  const [product, requestHeaders] = await Promise.all([productBySlug(slug), headers()]);
   if (!product) notFound();
 
   const back = backHref(requestHeaders.get('referer'));

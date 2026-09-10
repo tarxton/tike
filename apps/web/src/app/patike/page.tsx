@@ -16,7 +16,6 @@ import { Pager } from '@/components/pager';
 import { SortMenu } from '@/components/sort-menu';
 import { FilterBar, GENDERS } from '@/components/filter-bar';
 import { formatCount, formatSize, pluralResults, showingRange, t } from '@/lib/messages';
-import { getSizes } from '@/lib/size';
 import { parseSizes } from '@/lib/sizes';
 
 export const dynamic = 'force-dynamic';
@@ -42,9 +41,10 @@ export default async function Results({
     return Array.isArray(value) ? value[0] : value;
   };
 
-  // The URL wins over the cookie, so a shared link shows what the sender saw.
-  const urlSizes = parseSizes(first('velicina'));
-  const selected = urlSizes.length > 0 ? urlSizes : await getSizes();
+  // The URL is the only source. There used to be a cookie behind it, which meant a
+  // visitor who picked 44 once came back weeks later to a pre-filtered catalogue with
+  // nothing on screen or in the address bar explaining why.
+  const selected = parseSizes(first('velicina'));
   const brands = parseList(first('brend'));
   const modelKey = first('model');
   const query = first('q');

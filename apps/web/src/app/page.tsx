@@ -1,7 +1,7 @@
 import { availableSizes } from '@tike/db';
 import { Filters } from '@/components/filters';
 import { t } from '@/lib/messages';
-import { getSizes } from '@/lib/size';
+import { parseSizes } from '@/lib/sizes';
 
 // Results depend on live stock, so nothing here is prerendered at build time.
 export const dynamic = 'force-dynamic';
@@ -13,7 +13,12 @@ export default async function Home({
 }) {
   const params = await searchParams;
   const showKids = params.djecije === '1';
-  const [sizes, selected] = await Promise.all([availableSizes(), getSizes()]);
+  // Ticked only when the URL says so, so arriving at the home page shows the whole
+  // catalogue rather than last month's selection.
+  const selected = parseSizes(
+    Array.isArray(params.velicina) ? params.velicina[0] : params.velicina,
+  );
+  const sizes = await availableSizes();
 
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-5 py-16">
