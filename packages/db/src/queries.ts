@@ -870,6 +870,25 @@ export interface ProductDetail {
  * are left out — a shop that has stopped selling it is not a place to buy it — so a
  * product whose every offer has been retired returns its rows with an empty `offers`.
  */
+/**
+ * Where a slug that no longer names a product went.
+ *
+ * Matching merges two products into one when it learns they were always the same shoe,
+ * and the losing slug had been public up to that moment. Returning the survivor lets the
+ * page answer with a permanent redirect instead of a 404.
+ */
+export async function productSlugRedirect(slug: string): Promise<string | null> {
+  const rows = await db().execute(sql`
+    select p.slug as "slug"
+    from product_slug_alias a
+    join product p on p.id = a.product_id
+    where a.slug = ${slug}
+    limit 1
+  `);
+  const row = (rows.rows as { slug: string }[])[0];
+  return row ? row.slug : null;
+}
+
 export async function productBySlug(slug: string): Promise<ProductDetail | null> {
   const rows = await db().execute(sql`
     select

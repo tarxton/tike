@@ -7,6 +7,7 @@ export {
   availableBrands,
   availableShops,
   productBySlug,
+  productSlugRedirect,
   modelSuggestions,
   logSearchMiss,
   modelByKey,

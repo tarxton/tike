@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { headers } from 'next/headers';
-import { notFound } from 'next/navigation';
-import { productBySlug, searchOffers, type ProductOffer } from '@tike/db';
+import { notFound, permanentRedirect } from 'next/navigation';
+import { productBySlug, productSlugRedirect, searchOffers, type ProductOffer } from '@tike/db';
 import { formatPrice, formatSize, pluralShops, seeAllColourways, t } from '@/lib/messages';
 import { parseSizes } from '@/lib/sizes';
 import { OfferCard } from '@/components/offer-card';
@@ -75,7 +75,22 @@ export default async function ProductPage({
   const raw = query.velicina;
   const selected = parseSizes(Array.isArray(raw) ? raw[0] : raw);
   const [product, requestHeaders] = await Promise.all([productBySlug(slug), headers()]);
-  if (!product) notFound();
+  if (!product) {
+    /*
+     * The slug may simply have moved: matching merges two products when it learns they
+     * were the same shoe, and the losing name was public until that moment.
+     *
+     * Permanent rather than temporary, because it is. A 307 asks every crawler to keep
+     * the old URL as the canonical one and re-check it forever; a 308 hands the new URL
+     * whatever the old one had earned. Chained merges still resolve — a browser holding
+     * an old target simply gets redirected once more from there.
+     */
+    const moved = await productSlugRedirect(slug);
+    if (moved) {
+      permanentRedirect(`/patika/${moved}${raw ? `?velicina=${selected.join(',')}` : ''}`);
+    }
+    notFound();
+  }
 
   const back = backHref(requestHeaders.get('referer'));
 
