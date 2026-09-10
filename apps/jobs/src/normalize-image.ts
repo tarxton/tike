@@ -44,6 +44,71 @@ const FILL = 0.88;
  */
 const TRIM_THRESHOLD = 12;
 
+/** Same question for the flood fill, which is allowed a little more room. */
+const BACKDROP_TOLERANCE = 18;
+
+/**
+ * Only lift a backdrop that is already close to white.
+ *
+ * A shop that photographs on charcoal has made a deliberate choice, and turning it white
+ * would be inventing a picture rather than reframing one.
+ */
+const MIN_BACKDROP_LIGHTNESS = 200;
+
+/**
+ * Repaint the backdrop white, working inwards from the edges.
+ *
+ * Trimming alone is not enough and the first version of this file got it wrong: `trim`
+ * crops to the bounding box of the non-background content, and a shoe is not a rectangle,
+ * so the shop's backdrop survives inside that box all around the silhouette. Buzz and
+ * Sport Vision photograph on #f6f6f6, which left a visibly grey rectangle sitting on the
+ * white square.
+ *
+ * Flood fill from the border rather than a global "recolour every near-white pixel",
+ * because the second one cannot tell a grey backdrop from a grey shoe: only pixels
+ * connected to the edge are backdrop, and a grey panel in the middle of a trainer is
+ * safe by construction.
+ */
+async function whitenBackdrop(input: Buffer): Promise<Buffer> {
+  const { data, info } = await sharp(input)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const { width, height, channels } = info;
+
+  const seed = [data[0]!, data[1]!, data[2]!];
+  if (Math.min(...seed) < MIN_BACKDROP_LIGHTNESS) return input;
+
+  const isBackdrop = (i: number) =>
+    Math.abs(data[i]! - seed[0]!) <= BACKDROP_TOLERANCE &&
+    Math.abs(data[i + 1]! - seed[1]!) <= BACKDROP_TOLERANCE &&
+    Math.abs(data[i + 2]! - seed[2]!) <= BACKDROP_TOLERANCE;
+
+  // An explicit stack rather than recursion: 640x640 is 410k pixels, and a recursive
+  // fill over a mostly-uniform image overflows the call stack long before it finishes.
+  const seen = new Uint8Array(width * height);
+  const stack: number[] = [];
+  for (let x = 0; x < width; x += 1) stack.push(x, 0, x, height - 1);
+  for (let y = 0; y < height; y += 1) stack.push(0, y, width - 1, y);
+
+  while (stack.length > 0) {
+    const y = stack.pop()!;
+    const x = stack.pop()!;
+    if (x < 0 || y < 0 || x >= width || y >= height) continue;
+    const pixel = y * width + x;
+    if (seen[pixel]) continue;
+    const i = pixel * channels;
+    if (!isBackdrop(i)) continue;
+    seen[pixel] = 1;
+    data[i] = 255;
+    data[i + 1] = 255;
+    data[i + 2] = 255;
+    stack.push(x + 1, y, x - 1, y, x, y + 1, x, y - 1);
+  }
+
+  return sharp(data, { raw: { width, height, channels } }).png().toBuffer();
+}
+
 export interface Rendition {
   data: Buffer;
   width: number;
@@ -57,7 +122,7 @@ export async function normalizeImage(input: Buffer): Promise<Rendition> {
   // Two passes rather than one chain: `resize` with `fit: contain` pads to the target in
   // the same operation, so asking it to both shrink the shoe and centre it would fight
   // over which dimension the margin belongs to.
-  const shoe = await sharp(input)
+  const shoe = await sharp(await whitenBackdrop(input))
     .trim({ threshold: TRIM_THRESHOLD })
     .resize(inner, inner, { fit: 'inside' })
     .flatten({ background: '#ffffff' })
@@ -82,7 +147,7 @@ export async function normalizeImage(input: Buffer): Promise<Rendition> {
  * overwriting it. Rolling back a bad transform is then a column update, not nine thousand
  * fresh requests to five retailers.
  */
-export const RENDITION = 'v2';
+export const RENDITION = 'v3';
 
 /**
  * Object key: a hash of the source URL, under the shop that published it.
@@ -99,4 +164,16 @@ export const RENDITION = 'v2';
 export function objectKey(shopSlug: string, sourceUrl: string): string {
   const hash = createHash('sha256').update(sourceUrl).digest('hex').slice(0, 32);
   return `${RENDITION}/products/${shopSlug}/${hash}.webp`;
+}
+
+/**
+ * Where the very first rendition put an object.
+ *
+ * Kept so re-rendering can read the least-processed copy tike holds rather than the
+ * current one. Running a 640px webp through resize and re-encode a second time softens
+ * it for no reason when an earlier generation is sitting in the same bucket.
+ */
+export function originKey(shopSlug: string, sourceUrl: string): string {
+  const hash = createHash('sha256').update(sourceUrl).digest('hex').slice(0, 32);
+  return `products/${shopSlug}/${hash}.webp`;
 }

@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { withDb } from '@tike/db';
-import { normalizeImage, objectKey, RENDITION } from './normalize-image';
+import { normalizeImage, objectKey, originKey, RENDITION } from './normalize-image';
 import { putObject, r2Client, readR2Config, R2NotConfiguredError } from './r2';
 
 /**
@@ -69,7 +69,15 @@ async function main(): Promise<void> {
         const row = queue.shift();
         if (!row) return;
         try {
-          const res = await fetch(`${publicBase}/${row.key}`);
+          // The shop is recoverable from the current key, whose second-to-last segment it is.
+          const shopSlug = row.key.split('/').at(-2) ?? 'unknown';
+
+          // Prefer the first rendition, which is the closest thing to the shop's own file
+          // that tike still holds. Re-rendering a rendition compounds resampling for no
+          // gain; the fallback covers rows written before that prefix existed.
+          const origin = originKey(shopSlug, row.sourceUrl);
+          let res = await fetch(`${publicBase}/${origin}`);
+          if (!res.ok) res = await fetch(`${publicBase}/${row.key}`);
           if (!res.ok) throw new Error(`GET ${row.key} -> ${res.status}`);
           const input = Buffer.from(await res.arrayBuffer());
           bytesBefore += input.byteLength;
@@ -77,8 +85,6 @@ async function main(): Promise<void> {
           const output = await normalizeImage(input);
           bytesAfter += output.bytes;
 
-          // The shop is recoverable from the old key, whose second-to-last segment it is.
-          const shopSlug = row.key.split('/').at(-2) ?? 'unknown';
           const nextKey = objectKey(shopSlug, row.sourceUrl);
 
           if (dryRun || !client || !config) {
