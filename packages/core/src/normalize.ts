@@ -30,6 +30,8 @@ export interface NormalizedOffer {
   slug: string;
   sku: string | null;
   imageUrl: string | null;
+  /** Every picture the shop offered, so the image job can pick the packshot. */
+  imageUrls: string[];
   price: Money;
   /** Pre-sale price, only set when the shop is genuinely discounting. */
   originalPrice: Money | null;
@@ -243,6 +245,7 @@ export function normalizeOffer(parsed: ParsedOffer): NormalizedOffer {
     slug: slugify([parsed.brand, model].filter(Boolean).join(' ')),
     sku: parsed.sku,
     imageUrl: parsed.imageUrl,
+    imageUrls: parsed.imageUrls,
     price,
     originalPrice,
     gender: parsed.gender,

@@ -87,6 +87,7 @@ export function parseOfficeshoes(html: string, url: string): ParsedOffer {
     brand,
     sku: prop('sku'),
     imageUrl: prop('image'),
+    imageUrls: [prop('image')].filter((v): v is string => Boolean(v)),
     priceRaw,
     originalPriceRaw: extractOriginalPrice(scope),
     currency: prop('priceCurrency') === 'EUR' ? 'EUR' : 'BAM',

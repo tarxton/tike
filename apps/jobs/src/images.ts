@@ -3,7 +3,7 @@ import { imageCache, withDb } from '@tike/db';
 import { PoliteFetcher } from '@tike/crawler';
 import { crawlConfigSchema } from '@tike/contracts';
 import { putObject, r2Client, readR2Config, R2NotConfiguredError } from './r2';
-import { normalizeImage, objectKey } from './normalize-image';
+import { normalizeImage, objectKey, packshotScore, PACKSHOT_MIN_WHITE } from './normalize-image';
 
 /**
  * Copy product images into our own storage.
@@ -22,6 +22,9 @@ import { normalizeImage, objectKey } from './normalize-image';
  * job only ever asks for URLs it has no record of.
  */
 
+/** How far down a shop's picture list to look before settling for the first. */
+const MAX_CANDIDATES = 4;
+
 /**
  * Everything outstanding, unless asked otherwise.
  *
@@ -31,14 +34,6 @@ import { normalizeImage, objectKey } from './normalize-image';
  */
 const DEFAULT_LIMIT = Number.MAX_SAFE_INTEGER;
 
-/**
- * Object key: a hash of the source URL, under the shop that published it.
- *
- * The hash rather than the original path because shop URLs carry their own cache-busting
- * segments and are not always valid object keys; the shop prefix keeps the bucket
- * legible and makes one retailer's images removable in one operation, which is what an
- * opt-out or a takedown request actually needs.
- */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const limitArg = args.find((a) => a.startsWith('--limit='));
@@ -64,7 +59,8 @@ async function main(): Promise<void> {
     // Only images tike would actually show, and only those never attempted. A failure is
     // recorded too, so a dead URL is asked for once rather than every night forever.
     const rows = await db.execute(sql`
-      select distinct o.image_url as "sourceUrl", s.slug as "shopSlug"
+      select distinct on (o.image_url) o.image_url as "sourceUrl", s.slug as "shopSlug",
+             o.image_urls as "candidates"
       from offer o
       join shop s on s.id = o.shop_id
       where o.in_stock and s.active and o.image_url is not null
@@ -72,7 +68,11 @@ async function main(): Promise<void> {
         ${shopSlug ? sql`and s.slug = ${shopSlug}` : sql``}
       limit ${limit}
     `);
-    const pending = rows.rows as { sourceUrl: string; shopSlug: string }[];
+    const pending = rows.rows as {
+      sourceUrl: string;
+      shopSlug: string;
+      candidates: string[] | null;
+    }[];
 
     const total = await db.execute(sql`
       select count(*)::int as "done" from image_cache where error is null
@@ -105,6 +105,7 @@ async function main(): Promise<void> {
 
     let stored = 0;
     let failed = 0;
+    let scenesSkipped = 0;
 
     /*
      * Shops run concurrently, each still one request at a time.
@@ -123,17 +124,39 @@ async function main(): Promise<void> {
 
     const runShop = async (rows: typeof pending) => {
       for (const row of rows) {
-        const key = objectKey(row.shopSlug, row.sourceUrl);
+        let key = objectKey(row.shopSlug, row.sourceUrl);
         try {
           const fetcher = fetchers.get(row.shopSlug);
           if (!fetcher) throw new Error(`no fetcher for shop ${row.shopSlug}`);
-          // No Referer, and that is the honest position rather than a trick: a server
-          // fetching a file once so that readers stop being sent to the shop for it. The
-          // identifying User-Agent is the crawler's.
-          const input = Buffer.from(await fetcher.getBinary(row.sourceUrl));
-          // One rendition for every shop — see normalize-image.ts for why the shop's own
-          // backdrop is discarded rather than kept.
-          const output = await normalizeImage(input);
+          /*
+           * The shop's first picture is not reliably the product.
+           *
+           * Shops interleave editorial photographs with packshots and the JSON-LD order
+           * is simply the order they were uploaded, so 28 of 10.248 stored images were a
+           * model lacing a boot or a shoe in coloured smoke rather than the shoe on white.
+           *
+           * Candidates are tried in the shop's own order and the first that looks like a
+           * packshot wins, so in the ordinary case — which is 99.7% of them — this costs
+           * exactly one request, the same as before. Only a listing whose first image
+           * fails reaches for the next.
+           */
+          const candidates = row.candidates?.length ? row.candidates : [row.sourceUrl];
+          let output: Awaited<ReturnType<typeof normalizeImage>> | null = null;
+          let chosen = row.sourceUrl;
+          for (const candidate of candidates.slice(0, MAX_CANDIDATES)) {
+            const input = Buffer.from(await fetcher.getBinary(candidate));
+            const rendition = await normalizeImage(input);
+            // Keep the first attempt regardless, so a shop whose every photograph is a
+            // scene still gets a picture rather than none.
+            output ??= rendition;
+            if ((await packshotScore(rendition.data)) >= PACKSHOT_MIN_WHITE) {
+              output = rendition;
+              chosen = candidate;
+              break;
+            }
+            scenesSkipped += 1;
+          }
+          if (!output) throw new Error('no usable image');
 
           if (dryRun || !client || !config) {
             console.log(
@@ -144,11 +167,28 @@ async function main(): Promise<void> {
             continue;
           }
 
+          key = objectKey(row.shopSlug, chosen);
           await putObject(client, config, key, output.data, 'image/webp');
+
+          /*
+           * Point the offers at the picture that was actually stored.
+           *
+           * The cache is keyed by source URL and the site looks its image up by the URL
+           * on the offer, so promoting a different candidate without moving the offer
+           * leaves the site asking for a picture nothing cached — and falling back to
+           * hotlinking the very scene photograph this rejected.
+           */
+          if (chosen !== row.sourceUrl) {
+            await db.execute(sql`
+              update offer set image_url = ${chosen} where image_url = ${row.sourceUrl}
+            `);
+          }
           await db
             .insert(imageCache)
             .values({
-              sourceUrl: row.sourceUrl,
+              // Keyed on the picture actually stored, so a later run does not re-fetch
+              // the scene photograph it already rejected.
+              sourceUrl: chosen,
               key,
               width: output.width,
               height: output.height,
@@ -174,7 +214,7 @@ async function main(): Promise<void> {
 
     await Promise.all([...byShop.values()].map(runShop));
 
-    console.log(`\nstored=${stored} failed=${failed}`);
+    console.log(`\nstored=${stored} failed=${failed} scenes-rejected=${scenesSkipped}`);
   });
 }
 

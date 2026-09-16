@@ -124,9 +124,9 @@ function brandName(brand: JsonLdProduct['brand']): string | null {
   return brand.name?.trim() || null;
 }
 
-function firstImage(image: JsonLdProduct['image']): string | null {
-  const value = Array.isArray(image) ? image[0] : image;
-  return value?.trim() || null;
+function allImages(image: JsonLdProduct['image']): string[] {
+  const values = Array.isArray(image) ? image : [image];
+  return values.map((v) => v?.trim()).filter((v): v is string => Boolean(v));
 }
 
 /**
@@ -275,7 +275,8 @@ export function parseNbshop(html: string, url: string): ParsedOffer {
     title,
     brand: brandName(ld.brand),
     sku: ld.sku?.trim() || null,
-    imageUrl: firstImage(ld.image),
+    imageUrl: allImages(ld.image)[0] ?? null,
+    imageUrls: allImages(ld.image),
     priceRaw,
     originalPriceRaw: extractOriginalPrice($, priceRaw),
     currency: currency === 'EUR' ? ('EUR' as const) : ('BAM' as const),

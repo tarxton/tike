@@ -161,22 +161,29 @@ function extractGender(title: string): Gender | null {
   return null;
 }
 
-/** The largest gallery image Magento lists, which is the product shot. */
-function extractImage($: CheerioAPI, html: string): string | null {
+/**
+ * Every picture in Magento's gallery, in its own order.
+ *
+ * All of them rather than the first, because the first is not reliably the product:
+ * shops interleave editorial photographs, and choosing between them needs the pixels,
+ * which only the image job sees. This adapter returned a single image at first, which
+ * left Đak's scene shots with nothing to be replaced by.
+ */
+function extractImages($: CheerioAPI, html: string): string[] {
   const match = html.match(
     /"mage\/gallery\/gallery"\s*:\s*\{[\s\S]*?"data"\s*:\s*(\[[\s\S]*?\])\s*,/,
   );
   if (match?.[1]) {
     try {
       const data = JSON.parse(match[1]) as { img?: string }[];
-      const first = data.find((d) => d.img)?.img;
-      if (first) return first;
+      const images = data.map((d) => d.img?.trim()).filter((v): v is string => Boolean(v));
+      if (images.length > 0) return images;
     } catch {
       // fall through to the meta tag
     }
   }
   const meta = $('meta[property="og:image"]').attr('content')?.trim();
-  return meta || null;
+  return meta ? [meta] : [];
 }
 
 export function parseMagento2(html: string, url: string): ParsedOffer {
@@ -232,7 +239,8 @@ export function parseMagento2(html: string, url: string): ParsedOffer {
     // page: ".../puma-patike-puma-karmen-ii-jr-djevojcice-398878-01". It is what tier-2
     // matching joins on, so it is worth taking from the only place it appears.
     sku: extractSlugStyleCode(url),
-    imageUrl: extractImage($, html),
+    imageUrl: extractImages($, html)[0] ?? null,
+    imageUrls: extractImages($, html),
     priceRaw: finalPrice.toFixed(2),
     // Only a genuine markdown. Magento repeats the final price in oldPrice on full-price
     // products, which would otherwise put the whole shop on sale at 0% off.
