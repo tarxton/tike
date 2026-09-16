@@ -1,0 +1,133 @@
+import { expect, test } from '@playwright/test';
+import { searchTerm, sizeCase } from './support/catalogue';
+import { cards, parsePrice, resultCount } from './support/page-helpers';
+
+/**
+ * The controls around the grid.
+ *
+ * Each of these locks in a fault that was reported from the live site rather than found
+ * by reading the code, which is the argument for having the suite at all: they were all
+ * cheap to see and none of them showed up in a unit test.
+ */
+
+test.describe('filters', () => {
+  test('"Obriši filtere" empties the size picker, not only the URL', async ({ page }) => {
+    const { size } = await sizeCase();
+    // A query nothing can match, so the empty state is the one offering the way out.
+    await page.goto(`/patike?velicina=${size}&q=qzzxvnothing`);
+    await expect(page.getByText('Nema rezultata za tu pretragu.')).toBeVisible();
+
+    const chip = page.locator(`input[name="velicina"][value="${size}"]`);
+    await expect(chip).toBeChecked();
+
+    await page.getByRole('link', { name: 'Obriši filtere' }).last().click();
+    await expect(page).toHaveURL(/\/patike$/);
+
+    // The chips are uncontrolled inputs - `defaultChecked` applies on mount and never
+    // again - and a client navigation reuses the DOM node, so the picker used to keep
+    // ticks the URL had already dropped.
+    await expect(chip).not.toBeChecked();
+    await expect(page.locator('input[name="velicina"]:checked')).toHaveCount(0);
+  });
+
+  test('cheapest-first really is cheapest first', async ({ page }) => {
+    const { size } = await sizeCase();
+    await page.goto(`/patike?velicina=${size}&sort=najjeftinije`);
+
+    const list = cards(page);
+    const count = await list.count();
+    expect(count).toBeGreaterThan(1);
+
+    const prices: number[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const price = parsePrice(await list.nth(i).innerText());
+      expect(price, `card ${i} shows no price`).not.toBeNull();
+      prices.push(price!);
+    }
+    expect(prices).toEqual([...prices].sort((a, b) => a - b));
+
+    await page.goto(`/patike?velicina=${size}&sort=najskuplje`);
+    const dear: number[] = [];
+    const dearCount = await list.count();
+    for (let i = 0; i < dearCount; i += 1) {
+      dear.push(parsePrice(await list.nth(i).innerText())!);
+    }
+    expect(dear).toEqual([...dear].sort((a, b) => b - a));
+    expect(dear[0]).toBeGreaterThan(prices[0]!);
+  });
+
+  test('the sort menu closes when you pick an order, and when you tap outside it', async ({
+    page,
+  }) => {
+    const { size } = await sizeCase();
+    await page.goto(`/patike?velicina=${size}`);
+
+    const trigger = page.getByText('Sortiraj:');
+    const option = page.getByRole('link', { name: 'Najjeftinije' });
+
+    await trigger.click();
+    await expect(option).toBeVisible();
+
+    // A native <details> has no idea a link inside it navigated, so the menu used to
+    // stay open over the reordered results - and on a phone there is no stray click to
+    // dismiss it, leaving the trigger as the only way out.
+    await option.click();
+    await expect(page).toHaveURL(/sort=najjeftinije/);
+    await expect(option).toBeHidden();
+
+    await trigger.click();
+    await expect(page.getByRole('link', { name: 'Najskuplje' })).toBeVisible();
+    await page.locator('header p').first().click();
+    await expect(page.getByRole('link', { name: 'Najskuplje' })).toBeHidden();
+  });
+
+  test('a brand chip narrows the results and can be switched off again', async ({ page }) => {
+    const { size } = await sizeCase();
+    await page.goto(`/patike?velicina=${size}`);
+    const all = await resultCount(page);
+
+    const chip = page.getByRole('navigation', { name: 'Brend' }).getByRole('link').first();
+    const brand = (await chip.innerText()).trim();
+    await chip.click();
+
+    await expect(page).toHaveURL(/brend=/);
+    const narrowed = await resultCount(page);
+    expect(narrowed).toBeGreaterThan(0);
+    expect(narrowed).toBeLessThan(all);
+
+    // Every active chip switches itself off: that is why there is no "all brands" reset.
+    const active = page.getByRole('navigation', { name: 'Brend' }).getByRole('link', {
+      name: brand,
+      exact: true,
+    });
+    await active.click();
+    await expect.poll(async () => resultCount(page)).toBe(all);
+  });
+
+  test('pagination moves through the results without losing the filter', async ({ page }) => {
+    const term = await searchTerm();
+    await page.goto(`/patike?q=${encodeURIComponent(term)}`);
+
+    const total = await resultCount(page);
+    test.skip(
+      total <= 48,
+      `only ${total} results for "${term}" - one page, nothing to page through`,
+    );
+
+    const firstTitle = await cards(page).first().locator('h3').innerText();
+    await page.getByRole('link', { name: 'Sljedeća' }).click();
+
+    await expect(page).toHaveURL(/strana=2/);
+    await expect(page).toHaveURL(new RegExp(`q=${encodeURIComponent(term)}`));
+    await expect(page.getByText(/Prikazano 49-/)).toBeVisible();
+    expect((await cards(page).first().locator('h3').innerText()).trim()).not.toBe(
+      firstTitle.trim(),
+    );
+  });
+
+  test('a page past the end says so instead of looking like an empty search', async ({ page }) => {
+    await page.goto('/patike?strana=9999');
+    await expect(page.getByText('Nema rezultata na toj stranici.')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Nazad na prvu stranicu' })).toBeVisible();
+  });
+});

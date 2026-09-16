@@ -2,7 +2,17 @@
   "$schema": "https://turbo.build/schema.json",
   "ui": "stream",
   "globalEnv": ["NODE_ENV"],
-  "globalPassThroughEnv": ["DATABASE_URL", "SITE_NAME", "SITE_URL"],
+  "globalPassThroughEnv": [
+    "DATABASE_URL",
+    "SITE_NAME",
+    "SITE_URL",
+    "R2_PUBLIC_BASE_URL",
+    // e2e: where to point the suite, and which port to start the server on. Absent
+    // locally, where the config picks its own port and reads .env.local itself.
+    "E2E_BASE_URL",
+    "E2E_PORT",
+    "CI"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -29,6 +39,13 @@
     },
     "e2e": {
       "dependsOn": ["^build"],
+      "cache": false
+    },
+    "@tike/web#e2e": {
+      // Playwright starts `next start`, which needs a production build to exist. Without
+      // this, `pnpm e2e` on a clean tree fails inside the web server with "Could not find
+      // a production build" — which reads as a broken suite rather than a missing step.
+      "dependsOn": ["@tike/web#build"],
       "cache": false
     },
     "generate": {

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { SearchResult } from '@tike/db';
 import { ShopLogo } from './shop-logo';
 import { formatPrice, formatSize, pluralShops, t } from '@/lib/messages';
+import { chipsToShow } from '@/lib/size-chips';
 
 /**
  * One result: either a shoe several shops carry, or a single unmatched listing.
@@ -77,8 +78,13 @@ function CardLink({
   );
 }
 
+/** How many size chips fit on a card before the rest become "+N". */
+const CHIPS = 10;
+
 export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: number[] }) {
-  const shownSizes = offer.sizesEu.slice(0, 10);
+  // The filtered size is never the one dropped: a card on a page filtered to 46 that
+  // shows 36-41 and a "+9" gives no sign it has the one number the visitor came for.
+  const shownSizes = chipsToShow(offer.sizesEu, sizes, CHIPS);
   const extra = offer.sizesEu.length - shownSizes.length;
   const multiShop = offer.shopCount > 1;
   // Two shops at the same price is common — Buzz and Sport Vision share a price list —

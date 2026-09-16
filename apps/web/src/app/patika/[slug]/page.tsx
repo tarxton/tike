@@ -5,11 +5,15 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import { productBySlug, productSlugRedirect, searchOffers, type ProductOffer } from '@tike/db';
 import { formatPrice, formatSize, pluralShops, seeAllColourways, t } from '@/lib/messages';
 import { parseSizes } from '@/lib/sizes';
+import { chipsToShow } from '@/lib/size-chips';
 import { OfferCard } from '@/components/offer-card';
 import { ShopLogo } from '@/components/shop-logo';
 
 /** Enough to show the model comes in other colours without becoming a second grid. */
 const RELATED_LIMIT = 3;
+
+/** How many size chips a shop row shows before the rest become "+N". */
+const ROW_CHIPS = 14;
 
 export const dynamic = 'force-dynamic';
 
@@ -212,7 +216,12 @@ export default async function ProductPage({
       {product.offers.length > 0 ? (
         <section className="mt-10">
           <h2 className="mb-3 text-sm font-medium text-neutral-700">{t.atShops}</h2>
-          <ul className="space-y-3">
+          {/*
+           * Named for the e2e suite. The list is where "cheapest first" either holds or
+           * does not, and locating it through the surrounding markup meant a test that
+           * broke whenever the layout moved — which says nothing about the ordering.
+           */}
+          <ul data-testid="shop-rows" className="space-y-3">
             {product.offers.map((offer, i) => (
               <li key={offer.offerId}>
                 <ShopRow offer={offer} selected={selected} cheapest={i === 0 && spread > 0} />
@@ -274,7 +283,9 @@ function ShopRow({
   cheapest: boolean;
 }) {
   const hasYourSize = selected.length > 0 && selected.some((s) => offer.sizesEu.includes(s));
-  const shown = offer.sizesEu.slice(0, 14);
+  // The badge above already says whether this shop has your size; the chips are where
+  // someone checks it, so the one they are checking for must be among them.
+  const shown = chipsToShow(offer.sizesEu, selected, ROW_CHIPS);
   const extra = offer.sizesEu.length - shown.length;
 
   return (
