@@ -58,7 +58,16 @@ export function Filters({
             // The checked styling must come from CSS, not from the server-rendered
             // `selected` list: the input is visually hidden, so a server-computed class
             // never changes on click and the button looks dead until the page reloads.
-            <label key={size} className="cursor-pointer select-none">
+            // Keyed on the checked state as well as the size, so clearing the filters
+            // actually unticks them. These are uncontrolled inputs — `defaultChecked`
+            // applies on mount and never again — and a client navigation reuses the DOM
+            // node, so the chips kept whatever had been clicked while the URL behind them
+            // had already been emptied. Changing the key remounts only the chips that
+            // changed.
+            <label
+              key={`${size}:${selected.includes(size)}`}
+              className="cursor-pointer select-none"
+            >
               <input
                 type="checkbox"
                 name="velicina"

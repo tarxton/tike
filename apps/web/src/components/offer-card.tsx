@@ -118,7 +118,15 @@ export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: 
             {offer.title}
           </h3>
 
-          <div className="mt-auto flex flex-col gap-1 pt-1">
+          {/*
+           * Directly under the name, not pushed to the foot of the card.
+           *
+           * `mt-auto` put the price at the bottom of the flex column, so where it landed
+           * depended on how much else the card had to say: a discounted shoe in three
+           * shops filled the space and sat tight under its name, while a plain one-shop
+           * listing had its price drift a line or two away. Same card, two layouts.
+           */}
+          <div className="flex flex-col gap-1 pt-1">
             {/*
              * Two numbers on a card need saying which is which. An unlabelled struck-out
              * price beside "od 86,00 KM" reads just as easily as the other shop's price —
