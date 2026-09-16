@@ -195,6 +195,27 @@ await withDb(async (db) => {
     .returning({ id: crawlRun.id });
   const runId = run!.id;
 
+  /*
+   * Close out runs a previous process never finished.
+   *
+   * A run is marked `ok` or `aborted_parse_threshold` at the end, so a crawl killed
+   * partway — a 403 that threw, a runner timing out, a machine shut down — leaves its row
+   * saying `running` for ever. Seven such rows had accumulated, the oldest sixteen days
+   * old, and any per-shop health report would have counted seven crawls still in flight.
+   *
+   * Reconciled here rather than by a cleanup job: this is the only code that knows a
+   * previous run for this shop cannot still be going, because it is the one starting the
+   * next one. The concurrency group in the workflow guarantees no overlap per shop.
+   */
+  const abandoned = await db.execute(sql`
+    update crawl_run
+    set status = 'failed', finished_at = now()
+    where shop_id = ${row.id} and status = 'running' and id <> ${runId}
+  `);
+  if ((abandoned.rowCount ?? 0) > 0) {
+    console.log(`reconciled ${abandoned.rowCount} abandoned run(s) for this shop`);
+  }
+
   const parse = parserFor(row.platform);
   const failures: { url: string; reason: string }[] = [];
   let parsed = 0;
