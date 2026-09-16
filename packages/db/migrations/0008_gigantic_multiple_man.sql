@@ -1,0 +1,1 @@
+ALTER TABLE "offer" ADD COLUMN "image_urls" text[] DEFAULT '{}' NOT NULL;

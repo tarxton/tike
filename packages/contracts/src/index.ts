@@ -138,6 +138,16 @@ export const parsedOfferSchema = z.object({
   /** Manufacturer style code or the shop's SKU field, verbatim. */
   sku: z.string().nullable(),
   imageUrl: z.url().nullable(),
+  /**
+   * Every picture the shop published for this listing, in its own order.
+   *
+   * Kept because the first one is not reliably the product: shops interleave editorial
+   * photographs — a model lacing the shoe, a studio scene in coloured smoke — and 28 of
+   * 10.248 catalogue images were one of those rather than a packshot. Choosing between
+   * them needs the pixels, which only the image job has, so the crawl records the options
+   * and leaves the decision to it.
+   */
+  imageUrls: z.array(z.url()).default([]),
   priceRaw: z.string().min(1),
   originalPriceRaw: z.string().nullable(),
   currency: z.enum(['BAM', 'EUR']).default('BAM'),

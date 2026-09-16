@@ -186,6 +186,16 @@ export const offer = pgTable(
     rawBrand: text('raw_brand'),
     sku: text('sku'),
     imageUrl: text('image_url'),
+    /**
+     * Every picture the shop published, in its own order.
+     *
+     * The first is not reliably the product: shops interleave editorial photographs — a
+     * model lacing the shoe, a studio scene in coloured smoke — and 28 of 10.248 stored
+     * images turned out to be one of those rather than a packshot. Telling them apart
+     * needs the pixels, which only the image job sees, so the crawl records the options
+     * and that job promotes whichever one actually looks like a product.
+     */
+    imageUrls: text('image_urls').array().notNull().default([]),
     /** Guards matching: a kids shoe must never merge into its adult namesake. */
     gender: genderEnum('gender'),
     priceMinor: integer('price_minor').notNull(),

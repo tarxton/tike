@@ -177,3 +177,28 @@ export function originKey(shopSlug: string, sourceUrl: string): string {
   const hash = createHash('sha256').update(sourceUrl).digest('hex').slice(0, 32);
   return `products/${shopSlug}/${hash}.webp`;
 }
+
+/**
+ * Whether a rendered image looks like a product shot rather than a scene.
+ *
+ * A packshot sits on a flat light field, so after the transform it is mostly white; an
+ * editorial photograph fills the frame and leaves almost none. Measured across the whole
+ * catalogue the two barely overlap: the median image is 68% white, half a percent fall
+ * below 49%, and everything under 30% turned out to be a scene — a model lacing a boot, a
+ * shoe in coloured smoke, legs on a bench.
+ *
+ * The threshold sits in the empty space between the two populations rather than near
+ * either edge, so a slightly busy packshot is not rejected and an obvious scene is not
+ * kept. Being wrong in the permissive direction costs nothing: the image is used, exactly
+ * as it would have been before any of this existed.
+ */
+export const PACKSHOT_MIN_WHITE = 0.35;
+
+export async function packshotScore(webp: Buffer): Promise<number> {
+  const { data, info } = await sharp(webp).raw().toBuffer({ resolveWithObject: true });
+  let white = 0;
+  for (let i = 0; i < data.length; i += info.channels) {
+    if (data[i]! > 250 && data[i + 1]! > 250 && data[i + 2]! > 250) white += 1;
+  }
+  return white / (info.width * info.height);
+}
