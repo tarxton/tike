@@ -90,6 +90,9 @@ jobs:
       # does — a stale browser against a new client fails in ways that look like the app.
       - name: Resolve Playwright version
         id: pw
+        # From apps/web, not the root: pnpm installs into the package that declared the
+        # dependency, so the root cannot resolve it at all.
+        working-directory: apps/web
         run: |
           version=$(node -p "require('@playwright/test/package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
