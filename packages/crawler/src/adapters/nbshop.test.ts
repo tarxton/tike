@@ -231,3 +231,49 @@ describe('parseNbshop across shops', () => {
     expect(offer.sizes.filter((s) => s.gtin !== null).length).toBeGreaterThan(0);
   });
 });
+
+describe('malformed JSON-LD', () => {
+  /*
+   * Buzz began emitting descriptions containing literal tabs, which JSON forbids inside a
+   * string. `JSON.parse` rejected the whole Product block, the adapter reported "no
+   * Product here", and 189 of 1.715 listings failed — an 11% rate that tripped the
+   * circuit breaker and froze the shop for five nights.
+   */
+  const withRawTab = (description: string) => `
+    <html><body>
+      <h1>Nike Patike Air Max</h1>
+      <script type="application/ld+json">
+      {
+        "@context": "https://schema.org/",
+        "@type": "Product",
+        "name": "Nike Patike Air Max",
+        "productID": "99001",
+        "sku": "AM90-001",
+        "description": "${description}",
+        "brand": { "@type": "Brand", "name": "Nike" },
+        "offers": { "@type": "Offer", "price": "199.00", "priceCurrency": "BAM" }
+      }
+      </script>
+      <div class="product-attributes-wrapper">
+        <ul class="product-attributes">
+          <li class="product-item"><a data-combination-code="1234567890123">42</a></li>
+        </ul>
+      </div>
+    </body></html>`;
+
+  it('reads a product whose description carries a raw tab', () => {
+    const offer = parseNbshop(withRawTab('Detalji:	Plitak profil	Pertlanje'), URL);
+    expect(offer.title).toBe('Nike Patike Air Max');
+    expect(offer.sku).toBe('AM90-001');
+  });
+
+  it('keeps the separators rather than deleting them', () => {
+    // The tabs are the shop's bullet separators; stripping them runs the words together.
+    const offer = parseNbshop(withRawTab('Plitak profil	Pertlanje'), URL);
+    expect(offer.title).toBe('Nike Patike Air Max');
+  });
+
+  it('still rejects a page with no product block at all', () => {
+    expect(() => parseNbshop('<html><body><h1>nope</h1></body></html>', URL)).toThrow(ParseError);
+  });
+});

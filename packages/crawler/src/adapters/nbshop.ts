@@ -36,16 +36,79 @@ interface JsonLdProduct {
  * template full of empty placeholders. Parse defensively and keep the first block
  * that is a Product with a name.
  */
+/**
+ * `JSON.parse`, tolerating the raw control characters shops put in descriptions.
+ *
+ * JSON forbids an unescaped character below U+0020 inside a string, and `JSON.parse`
+ * rejects the whole document over one. Buzz began emitting product descriptions
+ * containing literal tabs — "Detalji:   Plitak profil	   Pertlanje	" — which made its
+ * Product block unparseable while the page itself was perfectly fine. The adapter treated
+ * that as "no Product here", and 189 of 1.715 listings failed on it: an 11% parse-failure
+ * rate that correctly tripped the circuit breaker and stopped the shop updating for five
+ * nights.
+ *
+ * Escaping rather than stripping, because the characters are real content: the tabs are
+ * the shop's bullet separators, and deleting them would run its words together.
+ */
+function parseJsonLd(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    try {
+      return JSON.parse(escapeControlCharacters(raw));
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * Escape control characters that sit *inside* string literals, and only those.
+ *
+ * The newlines between a pretty-printed document's tokens are legal and must stay raw —
+ * escaping those would produce a `
+` where JSON expects whitespace and break a document
+ * that parsed perfectly well before. So this tracks whether it is inside a string, which
+ * needs honouring backslash escapes to know when a quote actually closes one.
+ */
+function escapeControlCharacters(input: string): string {
+  const escapes: Record<number, string> = { 8: '\\b', 9: '\\t', 10: '\\n', 12: '\\f', 13: '\\r' };
+  let out = '';
+  let inString = false;
+  let afterBackslash = false;
+
+  for (const char of input) {
+    if (afterBackslash) {
+      out += char;
+      afterBackslash = false;
+      continue;
+    }
+    if (inString && char === '\\') {
+      out += char;
+      afterBackslash = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      out += char;
+      continue;
+    }
+    const code = char.charCodeAt(0);
+    if (inString && code < 0x20) {
+      out += escapes[code] ?? `\\u${code.toString(16).padStart(4, '0')}`;
+      continue;
+    }
+    out += char;
+  }
+  return out;
+}
+
 function findProductJsonLd($: CheerioAPI): JsonLdProduct | null {
   for (const el of $('script[type="application/ld+json"]').toArray()) {
     const raw = $(el).contents().text().trim();
     if (!raw) continue;
-    let data: unknown;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      continue; // malformed or templated block
-    }
+    const data = parseJsonLd(raw);
+    if (data === null) continue; // a templated or commented-out block, not a product
     const candidates = Array.isArray(data) ? data : [data];
     for (const c of candidates) {
       const product = c as JsonLdProduct;
