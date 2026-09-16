@@ -339,7 +339,7 @@ await withDb(async (db) => {
       }
     }
 
-    const planned = allGroups.map((ids) => {
+    const draft = allGroups.map((ids) => {
       // The shortest model name is usually the cleanest: shops append their own
       // qualifiers ("- BUBBLE LOVE", "(GS)") to the same underlying shoe.
       //
@@ -371,17 +371,94 @@ await withDb(async (db) => {
         const prior = priorSlugOf.get(m.offerId);
         if (prior) votes.set(prior, (votes.get(prior) ?? 0) + 1);
       }
-      const inherited = [...votes.entries()].sort(
-        (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
-      )[0]?.[0];
+      const ranked = [...votes.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+      const inherited = ranked[0]?.[0];
       const anchor = Math.min(...members.map((m) => m.offerId));
-      const slug =
-        inherited ?? `${slugify([lead.brand, lead.model].filter(Boolean).join(' '))}-${anchor}`;
+      const minted = `${slugify([lead.brand, lead.model].filter(Boolean).join(' '))}-${anchor}`;
 
-      // Any other slug these offers used to answer to now redirects here.
-      const superseded = [...votes.keys()].filter((v) => v !== slug);
-      return { members, lead, slug, superseded };
+      return { members, lead, anchor, inherited, minted, votes: ranked[0]?.[1] ?? 0 };
     });
+
+    /*
+     * One slug to one product, decided before anything is written.
+     *
+     * A cluster can only inherit a name nothing else has claimed. Two clusters want the
+     * same one whenever a product *splits* — matching learns that a group was really two
+     * shoes, and both halves carry members that used to answer to the old slug. The
+     * merge case was handled from the start; this one was not, and Postgres caught it as
+     * "ON CONFLICT DO UPDATE command cannot affect row a second time", which is an upsert
+     * batch touching one row twice.
+     *
+     * The cluster with the strongest claim keeps the name — most members carrying it,
+     * then the oldest offer — and the loser mints a fresh one, so which half keeps the
+     * URL never depends on row order.
+     */
+    const claimed = new Set<string>();
+    const contenders = [...draft].sort((a, b) => b.votes - a.votes || a.anchor - b.anchor);
+    const slugOfPlan = new Map<(typeof draft)[number], string>();
+    for (const plan of contenders) {
+      let slug = plan.inherited && !claimed.has(plan.inherited) ? plan.inherited : plan.minted;
+      // A minted slug carries the anchor offer id, which is unique to a cluster, so this
+      // only fires if an inherited name happens to equal another cluster's minted one.
+      while (claimed.has(slug)) slug = `${slug}-x`;
+      claimed.add(slug);
+      slugOfPlan.set(plan, slug);
+    }
+
+    const planned = draft.map((plan) => {
+      const slug = slugOfPlan.get(plan)!;
+      // Any other slug these offers used to answer to now redirects here.
+      const superseded = [...plan.members]
+        .map((m) => priorSlugOf.get(m.offerId))
+        .filter((v): v is string => Boolean(v) && v !== slug);
+      return { ...plan, slug, superseded: [...new Set(superseded)] };
+    });
+
+    /*
+     * One spelling per model, chosen by the shops' own consensus.
+     *
+     * Retailers write the same shoe more than one way and every variant became its own
+     * name on a card: "Total 90" beside "Total90", "Uno Lite" beside "Uno-Lite", "VL
+     * Court 3.0" beside "Vl Court 3.0", and Air Force 1 '07 with three different
+     * apostrophes. 130 model families were spelled more than one way across 886 products,
+     * which reads as duplicate listings even though the colourways behind them are
+     * genuinely different shoes.
+     *
+     * Frequency decides, because it is the closest thing to an authority available: the
+     * spelling most of the catalogue already uses. Ties prefer straight ASCII punctuation
+     * over typographic, then sort, so the answer never depends on row order.
+     *
+     * Renaming is safe now only because slugs are inherited rather than derived — before
+     * that, correcting a name moved its URL.
+     */
+    const foldName = (brand: string | null, model: string) =>
+      normalizeForSearch([brand, model].filter(Boolean).join(' ')).replace(/[^a-z0-9]/g, '');
+
+    const spellings = new Map<string, Map<string, number>>();
+    for (const { lead } of planned) {
+      const key = foldName(lead.brand, lead.model);
+      const counts = spellings.get(key) ?? new Map<string, number>();
+      counts.set(lead.model, (counts.get(lead.model) ?? 0) + 1);
+      spellings.set(key, counts);
+    }
+
+    const hasTypographic = (value: string) => /[‘’“”–—]/.test(value);
+    const canonicalModel = new Map<string, string>();
+    for (const [key, counts] of spellings) {
+      const best = [...counts.entries()].sort(
+        (a, b) =>
+          b[1] - a[1] ||
+          Number(hasTypographic(a[0])) - Number(hasTypographic(b[0])) ||
+          a[0].localeCompare(b[0]),
+      )[0]![0];
+      canonicalModel.set(key, best);
+    }
+
+    const modelFor = (lead: Row) =>
+      canonicalModel.get(foldName(lead.brand, lead.model)) ?? lead.model;
+
+    const renamed = planned.filter(({ lead }) => modelFor(lead) !== lead.model).length;
+    if (renamed > 0) console.log(`  renamed ${renamed} products to the commonest spelling`);
 
     const savedProducts: { id: number; slug: string }[] = [];
     for (const batch of chunks(planned, WRITE_CHUNK)) {
@@ -391,12 +468,12 @@ await withDb(async (db) => {
           batch.map(({ lead, slug }) => ({
             brandId: lead.brand ? (brandIds.get(normalizeForSearch(lead.brand)) ?? null) : null,
             slug,
-            model: lead.model,
+            model: modelFor(lead),
             styleCode: lead.sku,
             gender: (lead.gender as 'men' | 'women' | 'unisex' | 'kids' | null) ?? null,
             heroImageUrl: lead.imageUrl,
             searchDoc: normalizeForSearch(
-              [lead.brand, lead.model, lead.sku].filter(Boolean).join(' '),
+              [lead.brand, modelFor(lead), lead.sku].filter(Boolean).join(' '),
             ),
           })),
         )
@@ -452,11 +529,30 @@ await withDb(async (db) => {
      * A cluster picks up a second slug when two products merge into one — both halves
      * were public under their own name, and the loser has to keep resolving.
      */
-    const aliasRows = planned.flatMap(({ slug, superseded }) => {
+    /*
+     * One row per retired slug, and never one that still names a live product.
+     *
+     * Two products can claim the same old name when a group splits into three or more:
+     * the strongest claim keeps the name outright and every other half records it as
+     * superseded, so the batch ends up holding it twice. Postgres rejects that outright
+     * — "ON CONFLICT DO UPDATE command cannot affect row a second time" — so the winner
+     * is chosen here, in the same claim order that decided the slugs themselves.
+     */
+    const aliasBySlug = new Map<string, number>();
+    for (const plan of contenders) {
+      const slug = slugOfPlan.get(plan)!;
       const productId = idBySlug.get(slug);
-      if (productId === undefined) return [];
-      return superseded.map((old) => ({ slug: old, productId }));
-    });
+      if (productId === undefined) continue;
+      const superseded = [...plan.members]
+        .map((m) => priorSlugOf.get(m.offerId))
+        .filter((v): v is string => Boolean(v) && v !== slug);
+      for (const old of superseded) {
+        // A slug that still names a product of its own is not retired at all.
+        if (claimed.has(old) || aliasBySlug.has(old)) continue;
+        aliasBySlug.set(old, productId);
+      }
+    }
+    const aliasRows = [...aliasBySlug].map(([slug, productId]) => ({ slug, productId }));
     for (const batch of chunks(aliasRows, WRITE_CHUNK)) {
       await tx
         .insert(productSlugAlias)

@@ -291,7 +291,15 @@ function ShopRow({
         cheapest ? 'border-neutral-900' : 'border-neutral-200',
       ].join(' ')}
     >
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      {/*
+       * Stacked on a phone, side by side from `sm`.
+       *
+       * It used to wrap, which meant the layout depended on how long a retailer's name
+       * is: "Buzz Sneaker Station" pushed its price onto the next line while "Sport
+       * Vision" left room for it alongside, so two rows of the same list looked like two
+       * different designs.
+       */}
+      <div className="flex flex-col gap-y-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4">
         <div className="flex flex-wrap items-center gap-x-2">
           <ShopLogo name={offer.shopName} logoUrl={offer.shopLogoUrl} />
           {/* Named as well as shown: a mark is recognisable only once you already know it. */}

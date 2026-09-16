@@ -7,6 +7,8 @@ import {
   availableShops,
   availableSizes,
   isSortKey,
+  SORT_KEYS,
+  type SortKey,
   modelByKey,
   searchOffers,
 } from '@tike/db';
@@ -16,6 +18,16 @@ import { Pager } from '@/components/pager';
 import { SortMenu } from '@/components/sort-menu';
 import { FilterBar, GENDERS } from '@/components/filter-bar';
 import { formatCount, formatSize, pluralResults, showingRange, t } from '@/lib/messages';
+import { RESULTS_ANCHOR } from '@/lib/anchors';
+
+/** Order labels, server-side: the menu is a client component and cannot export these. */
+const SORT_LABELS: Record<SortKey, string> = {
+  najnovije: t.sortNewest,
+  najjeftinije: t.sortCheapest,
+  najskuplje: t.sortDearest,
+  snizenje: t.sortDiscount,
+  abecedno: t.sortAlphabetical,
+};
 import { parseSizes } from '@/lib/sizes';
 
 export const dynamic = 'force-dynamic';
@@ -173,6 +185,22 @@ export default async function Results({
   // that genuinely matched nothing. Tell them apart by the page number.
   const pastTheEnd = shown.items.length === 0 && page > 1;
 
+  /*
+   * Relevance only exists as an option when there is something to be relevant to, and
+   * without a query the unset default *is* "najnovije" — offering both an empty option
+   * and the named one would list the same order twice.
+   */
+  const relevanceIsDefault = Boolean(query);
+  const sortOptions: { key: SortKey | undefined; label: string }[] = [
+    ...(relevanceIsDefault ? [{ key: undefined, label: t.sortRelevance }] : []),
+    ...SORT_KEYS.map((key) => ({ key: key as SortKey | undefined, label: SORT_LABELS[key] })),
+  ];
+  const sortLabel = sort
+    ? SORT_LABELS[sort]
+    : relevanceIsDefault
+      ? t.sortRelevance
+      : SORT_LABELS.najnovije;
+
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
@@ -286,20 +314,22 @@ export default async function Results({
         <div className="mt-5 mb-6 flex justify-start border-t border-neutral-200 pt-4">
           <SortMenu
             sort={sort}
-            query={query}
-            hrefFor={(next) =>
-              buildHref({
+            current={sortLabel}
+            options={sortOptions.map((o) => ({
+              key: o.key,
+              label: o.label,
+              href: buildHref({
                 sizes: selected,
                 brands,
                 model: modelKey,
                 query,
                 kids: showKids,
-                sort: next,
+                sort: o.key,
                 onSale,
                 shops,
                 genders,
-              })
-            }
+              }),
+            }))}
           />
         </div>
       ) : null}
@@ -340,74 +370,83 @@ export default async function Results({
        * child when closed, and the point here is that two rows stay visible. Same
        * peer-checked pattern the size chips already use, so it needs no JavaScript.
        */}
-      <nav aria-label={t.brand} className="mb-8">
-        <input type="checkbox" id={BRAND_EXPAND} className="peer sr-only" />
+      {/*
+       * No brand filter while a model is chosen.
+       *
+       * A model belongs to exactly one brand, so the row collapses to a single chip that
+       * is already implied by the model above it — a filter whose only option is the
+       * thing you just picked.
+       */}
+      {activeModel ? null : (
+        <nav aria-label={t.brand} className="mb-8">
+          <input type="checkbox" id={BRAND_EXPAND} className="peer sr-only" />
 
-        <div className="flex max-h-[4.5rem] flex-wrap items-start gap-2 overflow-hidden text-sm peer-checked:max-h-none">
+          <div className="flex max-h-[4.5rem] flex-wrap items-start gap-2 overflow-hidden text-sm peer-checked:max-h-none">
+            {/*
+             * No "Svi brendovi" reset chip any more: with brands multi-select, every
+             * active chip switches itself off and shows it, so a chip whose only state was
+             * "nothing is selected" said nothing the other 48 were not already saying.
+             * What it did usefully — clear several at once — survives here, and only
+             * appears when there is something to clear.
+             */}
+            {brands.length > 0 ? (
+              <FilterChip
+                href={buildHref({
+                  sizes: selected,
+                  brands: [],
+                  model: modelKey,
+                  query,
+                  kids: showKids,
+                  sort,
+                  onSale,
+                  shops,
+                  genders,
+                })}
+                active={false}
+              >
+                <span aria-hidden="true">×</span> {t.clearBrands}
+              </FilterChip>
+            ) : null}
+            {brandChips.map((b) => (
+              <FilterChip
+                key={b.brand}
+                href={buildHref({
+                  sizes: selected,
+                  brands: toggleBrand(b.brand),
+                  model: modelKey,
+                  query,
+                  kids: showKids,
+                  sort,
+                  onSale,
+                  shops,
+                  genders,
+                })}
+                active={selectedBrands.has(b.brand.toLowerCase())}
+              >
+                {b.brand}
+              </FilterChip>
+            ))}
+          </div>
+
           {/*
-           * No "Svi brendovi" reset chip any more: with brands multi-select, every
-           * active chip switches itself off and shows it, so a chip whose only state was
-           * "nothing is selected" said nothing the other 48 were not already saying.
-           * What it did usefully — clear several at once — survives here, and only
-           * appears when there is something to clear.
+           * Two labels rather than one with swapping text: `peer-checked:` compiles to a
+           * sibling selector, so only a sibling of the checkbox can react to it. The row is
+           * 44px tall so it is a real target under a thumb.
            */}
-          {brands.length > 0 ? (
-            <FilterChip
-              href={buildHref({
-                sizes: selected,
-                brands: [],
-                model: modelKey,
-                query,
-                kids: showKids,
-                sort,
-                onSale,
-                shops,
-                genders,
-              })}
-              active={false}
-            >
-              <span aria-hidden="true">×</span> {t.clearBrands}
-            </FilterChip>
-          ) : null}
-          {brandChips.map((b) => (
-            <FilterChip
-              key={b.brand}
-              href={buildHref({
-                sizes: selected,
-                brands: toggleBrand(b.brand),
-                model: modelKey,
-                query,
-                kids: showKids,
-                sort,
-                onSale,
-                shops,
-                genders,
-              })}
-              active={selectedBrands.has(b.brand.toLowerCase())}
-            >
-              {b.brand}
-            </FilterChip>
-          ))}
-        </div>
-
-        {/*
-         * Two labels rather than one with swapping text: `peer-checked:` compiles to a
-         * sibling selector, so only a sibling of the checkbox can react to it. The row is
-         * 44px tall so it is a real target under a thumb.
-         */}
-        <label
-          htmlFor={BRAND_EXPAND}
-          className="mt-2 flex h-11 cursor-pointer items-center justify-center gap-1.5 border-t border-neutral-200 text-sm text-neutral-600 peer-checked:hidden hover:text-neutral-900"
-        >
-          <Chevron direction="down" /> {t.allBrands}
-        </label>
-        <label
-          htmlFor={BRAND_EXPAND}
-          className="mt-2 hidden h-11 cursor-pointer items-center justify-center gap-1.5 border-t border-neutral-200 text-sm text-neutral-600 peer-checked:flex hover:text-neutral-900"
-        >
-          <Chevron direction="up" /> {t.fewerBrands}
-        </label>
-      </nav>
+          <label
+            htmlFor={BRAND_EXPAND}
+            className="mt-2 flex h-11 cursor-pointer items-center justify-center gap-1.5 border-t border-neutral-200 text-sm text-neutral-600 peer-checked:hidden hover:text-neutral-900"
+          >
+            <Chevron direction="down" /> {t.allBrands}
+          </label>
+          <label
+            htmlFor={BRAND_EXPAND}
+            className="mt-2 hidden h-11 cursor-pointer items-center justify-center gap-1.5 border-t border-neutral-200 text-sm text-neutral-600 peer-checked:flex hover:text-neutral-900"
+          >
+            <Chevron direction="up" /> {t.fewerBrands}
+          </label>
+        </nav>
+      )}
 
       {pastTheEnd ? (
         <div className="rounded-xl border border-dashed border-neutral-300 px-6 py-16 text-center">
@@ -443,7 +482,7 @@ export default async function Results({
           ) : null}
         </div>
       ) : (
-        <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        <ul id={RESULTS_ANCHOR} className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {shown.items.map((offer) => (
             <li key={offer.offerId}>
               <OfferCard offer={offer} sizes={selected} />

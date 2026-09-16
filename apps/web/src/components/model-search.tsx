@@ -4,8 +4,12 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ModelSuggestion } from '@tike/db';
 import { pluralColours, pluralShops, t } from '@/lib/messages';
+import { RESULTS_ANCHOR } from '@/lib/anchors';
 
 /** Long enough that a fast typist fires one request per word, not per letter. */
+/** How often the post-navigation scroll checks whether the new page has arrived. */
+const POLL_MS = 50;
+
 const DEBOUNCE_MS = 150;
 const MIN_QUERY = 2;
 
@@ -87,6 +91,48 @@ export function ModelSearch({ defaultValue }: { defaultValue?: string }) {
    * model already names its brand, and keeping an old one would guarantee no results
    * the moment someone filtered to adidas and then picked a Nike.
    */
+  /**
+   * Carry the reader down to the results once they exist.
+   *
+   * On a phone the filters and the first cards sit a screen and a half below the search
+   * box, so choosing a model rearranged a grid nobody could see.
+   *
+   * Polling for the element rather than scrolling on a `useSearchParams` change: the
+   * results are rendered by the server after the navigation, so at the moment the effect
+   * would fire they may not be in the document yet, and a scroll to nothing is silent.
+   *
+   * `setTimeout` rather than `requestAnimationFrame`, which is what this used first.
+   * Browsers pause rAF in a hidden tab, so switching away while the page loaded meant the
+   * poll never ran once and the reader came back to a grid that had not moved. Timers
+   * keep running, throttled.
+   */
+  const scrollToResults = (href: string) => {
+    const target = new URL(href, window.location.origin);
+    // Generous, because it is only a safety net: the loop exits the moment the new URL
+    // is in place, and a dev-mode navigation can take several seconds where production
+    // takes a few hundred milliseconds. Too tight a deadline simply does nothing, which
+    // is indistinguishable from the feature not existing.
+    const deadline = Date.now() + 8000;
+    const tick = () => {
+      if (Date.now() > deadline) return;
+      // Wait for the navigation to commit, not merely for the anchor to exist. The page
+      // being left behind has a `#rezultati` of its own, so polling for the element alone
+      // finds the old one immediately, starts a smooth scroll, and has it cut off a
+      // moment later when the new document replaces it — which looked like a 20px twitch.
+      if (window.location.search !== target.search) {
+        setTimeout(tick, POLL_MS);
+        return;
+      }
+      const results = document.getElementById(RESULTS_ANCHOR);
+      if (!results) {
+        setTimeout(tick, POLL_MS);
+        return;
+      }
+      results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    setTimeout(tick, POLL_MS);
+  };
+
   const hrefFor = (s: ModelSuggestion) => {
     if (s.slug) return `/patika/${s.slug}`;
     const sp = new URLSearchParams(window.location.search);
@@ -99,7 +145,19 @@ export function ModelSearch({ defaultValue }: { defaultValue?: string }) {
 
   const choose = (s: ModelSuggestion) => {
     setOpen(false);
-    router.push(hrefFor(s));
+    /*
+     * Put the chosen name in the box.
+     *
+     * Typing "p6" and picking "Nike P-6000" used to leave "p6" sitting there while the
+     * results quietly changed behind it, so there was nothing on screen saying which
+     * shoe had been selected, or that anything had been selected at all.
+     */
+    setValue([s.brand, s.model].filter(Boolean).join(' '));
+    const href = hrefFor(s);
+    router.push(href);
+    // Landing on a product page moves the reader anyway; only a filtered grid needs
+    // carrying down to the results it just changed.
+    if (!s.slug) scrollToResults(href);
   };
 
   // Stale rows from a longer query stay in state while the user deletes back past the
