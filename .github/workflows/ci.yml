@@ -17,23 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: tike
-          POSTGRES_PASSWORD: tike
-          POSTGRES_DB: tike_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-    env:
-      DATABASE_URL: postgresql://tike:tike@localhost:5432/tike_test
+    # No database service here. One was declared from the first CI run and nothing ever
+    # connected to it: every unit test here is pure, and the read path speaks Neon's
+    # SQL-over-HTTP protocol (ADR-0001), which a plain postgres cannot answer. It also set
+    # DATABASE_URL job-wide, which would have quietly shadowed the real one the day a test
+    # did need a database. The e2e job below is what talks to Postgres.
 
     steps:
       - uses: actions/checkout@v5
@@ -55,3 +43,79 @@ jobs:
 
       - name: Lint, typecheck, test, build
         run: pnpm turbo run lint typecheck test build
+
+  e2e:
+    name: End-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # After the cheap checks. This job talks to the live catalogue and burns Neon compute;
+    # a branch that does not typecheck has not earned either.
+    needs: verify
+    # A fork's pull request has no access to secrets, so it cannot reach the database and
+    # this would fail for a reason the contributor cannot fix.
+    if: github.event.pull_request.head.repo.fork != true
+
+    # Not scoped to the ref, on purpose. The suite asserts that one outclick writes
+    # exactly one click row, and two runs against the same database at the same time each
+    # see the other's. Runs queue rather than cancel: a cancelled run can leave the rows
+    # it was about to delete.
+    concurrency:
+      group: e2e-database
+      cancel-in-progress: false
+
+    env:
+      # The read path only ever reads; the suite's own writes are the click rows it then
+      # removes. Pooled URL, per ADR-0001.
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      R2_PUBLIC_BASE_URL: ${{ vars.R2_PUBLIC_BASE_URL }}
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Check the database is reachable
+        run: |
+          test -n "$DATABASE_URL" || {
+            echo "DATABASE_URL is not set. The e2e suite runs against a Neon branch:"
+            echo "set the repository secret, or run the suite locally with pnpm e2e."
+            exit 1
+          }
+
+      # Pinned to the version in the lockfile so the cache key changes when Playwright
+      # does — a stale browser against a new client fails in ways that look like the app.
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          version=$(node -p "require('@playwright/test/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        id: browsers
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install browsers
+        working-directory: apps/web
+        run: pnpm exec playwright install --with-deps chromium webkit
+
+      # Production mode, the same build the deploy job makes. `next dev` serves its
+      # client chunks only to the origin it was started on and caches differently, so a
+      # suite that passes there says nothing about what ships.
+      - name: Run the suite
+        run: pnpm e2e
+
+      # Only when something went wrong. The report carries traces and screenshots for
+      # every failed test, which is what makes a red run diagnosable without a local
+      # reproduction; on a green run it is a few megabytes nobody opens.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7

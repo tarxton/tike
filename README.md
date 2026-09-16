@@ -83,17 +83,32 @@ pnpm test
 pnpm dev
 ```
 
-| Command                                | Does                         |
-| -------------------------------------- | ---------------------------- |
-| `pnpm dev`                             | run the site locally         |
-| `pnpm test`                            | unit tests (Vitest)          |
-| `pnpm typecheck`                       | TypeScript, no emit          |
-| `pnpm db:generate` / `pnpm db:migrate` | Drizzle migrations           |
-| `pnpm db:studio`                       | browse the database          |
-| `pnpm crawl <shop>`                    | run one shop's crawl locally |
+| Command                                | Does                          |
+| -------------------------------------- | ----------------------------- |
+| `pnpm dev`                             | run the site locally          |
+| `pnpm test`                            | unit tests (Vitest)           |
+| `pnpm e2e`                             | end-to-end tests (Playwright) |
+| `pnpm typecheck`                       | TypeScript, no emit           |
+| `pnpm db:generate` / `pnpm db:migrate` | Drizzle migrations            |
+| `pnpm db:studio`                       | browse the database           |
+| `pnpm crawl <shop>`                    | run one shop's crawl locally  |
 
 `.env.local` lives at the repository root and is read by both the site and the jobs runner;
 the Neon CLI writes it there too.
+
+`pnpm e2e` builds the site, starts it, and drives it in Chromium and mobile WebKit. It runs
+against a real catalogue rather than a seeded one — the read path speaks Neon's
+SQL-over-HTTP protocol, so a plain Postgres cannot answer it — which means the tests assert
+invariants instead of values: every card the size filter returns claims that size, shops
+list cheapest first, an outclick redirects and logs exactly one click, and the search still
+works with JavaScript switched off. Prices and stock change nightly; none of that may
+change a result. The click rows the suite writes, it deletes.
+
+The browsers are a one-off download:
+
+```bash
+pnpm --filter @tike/web exec playwright install chromium webkit
+```
 
 ## Crawling policy
 
