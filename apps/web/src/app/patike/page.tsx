@@ -19,6 +19,7 @@ import { SortMenu } from '@/components/sort-menu';
 import { FilterBar, GENDERS } from '@/components/filter-bar';
 import { formatCount, formatSize, pluralResults, showingRange, t } from '@/lib/messages';
 import { RESULTS_ANCHOR } from '@/lib/anchors';
+import { ScrollMemory } from '@/components/scroll-memory';
 
 /** Order labels, server-side: the menu is a client component and cannot export these. */
 const SORT_LABELS: Record<SortKey, string> = {
@@ -203,6 +204,7 @@ export default async function Results({
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
+      <ScrollMemory />
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <Link href="/" className="text-xl font-semibold tracking-tight text-neutral-900">
           {t.siteName}
