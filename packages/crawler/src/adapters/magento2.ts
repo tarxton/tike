@@ -175,8 +175,23 @@ function extractImages($: CheerioAPI, html: string): string[] {
   );
   if (match?.[1]) {
     try {
-      const data = JSON.parse(match[1]) as { img?: string }[];
-      const images = data.map((d) => d.img?.trim()).filter((v): v is string => Boolean(v));
+      const data = JSON.parse(match[1]) as { img?: string; isMain?: boolean }[];
+      /*
+       * The shop's own main picture first.
+       *
+       * Magento flags one gallery entry `isMain`, and that is the picture its gallery opens
+       * on — array order is only upload order. Reading the array as-is put New Balance 327
+       * W327SUB on a card as the pair seen from behind: Đak's gallery lists that shot first
+       * and flags the side view, twelfth, as main. Sampled across the listings where the two
+       * disagree, the flag was the right picture every time it differed and the same picture
+       * everywhere else.
+       *
+       * The flag rather than guessing from file names, which was tried and measured: Đak's
+       * unnumbered files are as often a sole or a pair from above as a side view, and ranking
+       * by name swapped about fifteen good card images for worse ones.
+       */
+      const ordered = [...data.filter((d) => d.isMain), ...data.filter((d) => !d.isMain)];
+      const images = ordered.map((d) => d.img?.trim()).filter((v): v is string => Boolean(v));
       if (images.length > 0) return images;
     } catch {
       // fall through to the meta tag

@@ -162,7 +162,15 @@ async function main(): Promise<void> {
            * exactly one request, the same as before. Only a listing whose first image
            * fails reaches for the next.
            */
-          const candidates = row.candidates?.length ? row.candidates : [row.sourceUrl];
+          // The offer's own picture first, then the rest in the shop's order. Not simply the
+          // stored list from the top: the picture on the offer is the one proposed, and when
+          // the two disagreed the job went back to the list's first entry and undid the
+          // proposal — which is how W327SUB's heel view came straight back after being
+          // pointed at the side view Đak marks as main.
+          const candidates = [
+            row.sourceUrl,
+            ...(row.candidates ?? []).filter((url) => url !== row.sourceUrl),
+          ];
           let output: Awaited<ReturnType<typeof normalizeImage>> | null = null;
           let chosen = row.sourceUrl;
           for (const candidate of candidates.slice(0, MAX_CANDIDATES)) {
