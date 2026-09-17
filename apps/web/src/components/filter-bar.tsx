@@ -57,7 +57,7 @@ export function FilterBar({
 
         {/*
          * Logo and name, not the logo alone. A mark only works as a label for someone who
-         * already recognises it, and these four are small BiH retailers — the filter was
+         * already recognises it, and these are small BiH retailers — the filter was
          * asking people to identify a shop from a 16px monochrome mark before they could
          * decide whether to use it.
          */}

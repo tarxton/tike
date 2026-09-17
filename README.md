@@ -8,11 +8,11 @@ sell you today — with prices compared across shops.
 
 **Live:** <https://tike-web.tarxton-2004.workers.dev>
 
-> Status: five retailers ingested — Buzz Sneaker Station, Office Shoes, Sport Reality,
-> Sport Vision and Đak Sport — currently around **10,000 in-stock listings** across **9,000
-> products**, refreshed nightly. Search, size filtering, cross-shop price comparison and
-> tracked click-out are live. Not yet on a real domain, and deliberately not indexable until
-> it is.
+> Status: six retailers ingested — Buzz Sneaker Station, Office Shoes, Sport Reality,
+> Sport Vision, Đak Sport and The Spot — currently around **10,000 in-stock listings**
+> across **9,000 products**, refreshed nightly. Search, size filtering, cross-shop price
+> comparison and tracked click-out are live. Not yet on a real domain, and deliberately not
+> indexable until it is.
 
 ## How it works
 
@@ -37,8 +37,8 @@ sell you today — with prices compared across shops.
 ```
 
 Shops are ingested by **platform adapter**, not by bespoke scraper: one NBSHOP adapter covers
-three BiH retailers, and a Magento 2 adapter covers Đak Sport. Adding a shop on a known
-platform is a config row, not code.
+three BiH retailers, and a Magento 2 adapter covers Đak Sport and The Spot. Adding a shop on a
+known platform is a config row, not code — The Spot was exactly that.
 
 The interesting problems are in `packages/core` and `apps/jobs`:
 
@@ -120,7 +120,8 @@ tike reads publicly available product pages from BiH retailers, and does so poli
   exponentially on 429 and any 5xx.
 - Bot protection is never bypassed. A shop that blocks an identified crawler is stopped and
   contacted, not worked around.
-- One shop is crawled under written permission from its operator, at the rate they agreed.
+- Two shops are crawled with their operators' permission, at no more than one request a
+  second.
 - Any shop can ask to be delisted and will be, promptly.
 - A run that fails to parse more than 5% of pages aborts and writes nothing, so a markup
   change is loud rather than silently marking a shop out of stock.
