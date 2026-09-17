@@ -28,13 +28,7 @@ export default async function Home({
       <p className="mt-3 text-lg text-neutral-600">{t.intro}</p>
 
       <section className="mt-10">
-        <Filters
-          sizes={sizes}
-          selected={selected}
-          showKids={showKids}
-          kidsHref={showKids ? '/' : '/?djecije=1'}
-          returnTo="/"
-        />
+        <Filters sizes={sizes} selected={selected} showKids={showKids} returnTo="/" />
       </section>
     </main>
   );

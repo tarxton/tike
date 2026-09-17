@@ -61,6 +61,60 @@
   outline-offset: 2px;
 }
 
+/*
+ * The size picker's grid. Equal columns, so the whole adult sizes form full rows — 36 to 51
+ * is sixteen numbers, four rows of four on a phone and two rows of eight wider — and chips
+ * stop taking their width from however many characters "44⅔" happens to be.
+ */
+.size-grid {
+  --chip-height: calc(2.25rem + 2px);
+  --gap: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--gap);
+  /* Room for the focus ring, which the scrolling view would otherwise clip at its edges. */
+  padding: 4px;
+  margin: -4px;
+}
+
+.size-grid .size-chip {
+  text-align: center;
+}
+
+@media (min-width: 640px) {
+  .size-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+}
+
+/* Halves, thirds and children's sizes wait behind "Prikaži sve brojeve". */
+.size-grid [data-extra] {
+  display: none;
+}
+
+.peer:checked ~ .size-grid [data-extra] {
+  display: block;
+}
+
+/*
+ * The full view keeps the base view's height and scrolls, so opening it moves nothing
+ * below it. The height is computed from the row count the base sizes need at this width,
+ * which the component passes in, rather than hard-coded to sixteen sizes.
+ */
+.peer:checked ~ .size-grid {
+  height: calc(
+    var(--rows-narrow) * var(--chip-height) + (var(--rows-narrow) - 1) * var(--gap) + 8px
+  );
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (min-width: 640px) {
+  .peer:checked ~ .size-grid {
+    height: calc(var(--rows-wide) * var(--chip-height) + (var(--rows-wide) - 1) * var(--gap) + 8px);
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

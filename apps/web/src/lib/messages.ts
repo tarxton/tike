@@ -11,8 +11,8 @@ export const t = {
 
   chooseSize: 'Tvoj broj',
   chooseSizeShort: 'Broj',
-  showKids: 'Prikaži dječije brojeve',
-  hideKids: 'Sakrij dječije brojeve',
+  showAllSizes: 'Prikaži sve brojeve',
+  showBaseSizes: 'Prikaži manje brojeva',
   multiSizeHint: 'Možeš odabrati više brojeva odjednom.',
   discount: 'Popust',
   oldPrice: 'Stara cijena',

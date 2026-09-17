@@ -81,6 +81,9 @@ export function sizeCase(): Promise<SizeCase> {
       join offer o on o.id = f.offer_id
       join shop s on s.id = o.shop_id
       where f.in_stock and o.in_stock and s.active and f.size_eu >= ${ADULT_MIN_SIZE}
+        -- A whole number: the picker shows halves and thirds only in its full view, so a
+        -- test ticking a half would be clicking a chip that is not on screen.
+        and f.size_eu = trunc(f.size_eu)
       group by 1
       order by 2 desc, 1
       limit 1
