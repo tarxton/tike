@@ -102,6 +102,37 @@ const shops = [
       runsInCi: false,
     },
   },
+  {
+    // Magento 2, and the Magento adapter reads it unchanged: the same swatch jsonConfig,
+    // the same `productBrand` / `productGender` script, and titles written the same way
+    // as Đak's — "ADIDAS PATIKE COURT ZA MUŠKARCE". Crawled with the operator's permission.
+    slug: 'thespot',
+    logoUrl: null,
+    name: 'The Spot',
+    baseUrl: 'https://www.thespot.ba',
+    platform: 'magento2' as const,
+    // A flat urlset, not an index: 2,364 URLs covering categories, clothing, accessories
+    // and CMS pages alongside the shoes.
+    sitemapUrl: 'https://www.thespot.ba/sitemap_spot.xml',
+    // robots.txt asks for Crawl-Delay 1, the same as Đak.
+    minDelayMs: 1200,
+    maxConcurrency: 1,
+    crawlConfig: {
+      // The type is in the slug, but not always behind a hyphen: most products read
+      // "nike-patike-…", while older listings start with it — "/patike-ozweego-gy6177".
+      // "/patike-" rather than "patike" keeps out the three category pages that end in
+      // "/obuca/patike", which would fetch fine and then fail to parse as products.
+      // 508 of 2,364 sitemap URLs.
+      pathContains: ['-patike-', '/patike-'],
+      // Same Cloudflare behaviour as Đak on both counts, measured 2026-09-17: Node's
+      // client gets the block page on every URL while curl with the identical tike-bot
+      // User-Agent gets 200 from the same machine; and from a GitHub runner even curl is
+      // blocked on everything but robots.txt (ray a3c8e11468a4c963-IAD). Permission is
+      // what makes the first acceptable, and the second waits on their allowlist.
+      transport: 'curl' as const,
+      runsInCi: false,
+    },
+  },
 ];
 
 await withDb(async (db) => {
