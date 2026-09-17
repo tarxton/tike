@@ -109,8 +109,8 @@ export function sanitizeFixture(html) {
  * Magento 2 keeps identity, price and sizes inside a script, which is exactly what this
  * module otherwise throws away — so the block is **rebuilt** rather than copied.
  *
- * Only the four keys the parser reads survive: productId, the size attribute, prices, and
- * one gallery image URL. Copying the original would carry along whatever else Magento put
+ * Only the keys the parser reads survive: productId, the size attribute, prices, and the
+ * gallery's image URLs with their `isMain` flag. Copying the original would carry along whatever else Magento put
  * in its 42 init blocks, and rebuilding makes it impossible for a credential or a stock
  * quantity to ride into a public repository unnoticed.
  */
@@ -161,13 +161,22 @@ export function sanitizeMagento2Fixture(html) {
   let galleryBlock = '';
   if (gallery?.[1]) {
     try {
-      const first = JSON.parse(gallery[1]).find((d) => d.img)?.img;
-      if (first) {
+      // Every picture with its main flag, not only the first: which picture the shop marks
+      // as main is exactly what the parser has to get right, and a fixture holding one
+      // image cannot show it doing so.
+      const images = JSON.parse(gallery[1])
+        .filter((d) => d.img)
+        .map((d) => ({ img: d.img, isMain: Boolean(d.isMain) }));
+      if (images.length > 0) {
         galleryBlock =
           '<script type="text/x-magento-init">' +
           JSON.stringify({
             '[data-gallery-role=gallery-placeholder]': {
-              'mage/gallery/gallery': { data: [{ img: first }] },
+              // `options` after `data` because that is the page's own shape, and the
+              // parser finds the array by what follows it. Without a key there, the first
+              // version of this block was never read at all and the fixtures tested no
+              // images.
+              'mage/gallery/gallery': { data: images, options: {} },
             },
           }) +
           '</script>';

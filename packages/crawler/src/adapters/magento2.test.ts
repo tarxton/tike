@@ -102,6 +102,35 @@ describe('parseMagento2', () => {
     expect(normalized.sizes.map((s) => s.sizeEu)).toContain(37.33);
   });
 
+  /*
+   * New Balance 327 W327SUB, captured from Đak. Its gallery lists the pair seen from behind
+   * first and flags the side view — twelfth — as main, and the card showed the heel view.
+   */
+  it('proposes the picture the shop marks as main, not the first one it lists', () => {
+    const html = load('04-main-not-first.html');
+    const offer = parseMagento2(
+      html,
+      'https://www.djaksport.ba/new-balance-patike-327-za-zene-w327sub',
+    );
+
+    expect(html.indexOf('W327SUB_6.jpg')).toBeLessThan(html.indexOf('1787149617W327SUB.jpg'));
+    expect(offer.imageUrl).toMatch(/1787149617W327SUB\.jpg$/);
+    expect(offer.imageUrls[0]).toBe(offer.imageUrl);
+    // Every other picture is still offered, in the shop's order, for the image job to fall
+    // back on if the main one turns out to be a scene.
+    expect(offer.imageUrls).toHaveLength(12);
+    expect(offer.imageUrls[1]).toMatch(/1787149633W327SUB_6\.jpg$/);
+  });
+
+  it('keeps the shop order when no picture is flagged as main', () => {
+    const unflagged = load('04-main-not-first.html').replaceAll('"isMain":true', '"isMain":false');
+    const offer = parseMagento2(
+      unflagged,
+      'https://www.djaksport.ba/new-balance-patike-327-za-zene-w327sub',
+    );
+    expect(offer.imageUrl).toMatch(/1787149633W327SUB_6\.jpg$/);
+  });
+
   it('normalizes a whole offer end to end', () => {
     const normalized = normalizeOffer(parseMagento2(load('01-in-stock.html'), IN_STOCK));
     expect(normalized.price.amountMinor).toBe(9093);

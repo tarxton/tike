@@ -269,7 +269,28 @@ await withDb(async (db) => {
               title: normalized.title,
               rawBrand: normalized.brand,
               sku: normalized.sku,
-              imageUrl: normalized.imageUrl,
+              /*
+               * The picture the image job chose, for as long as the shop still lists it.
+               *
+               * The job moves an offer off a scene photograph onto the packshot behind it,
+               * and every crawl used to move it straight back to the shop's first picture.
+               * So each night the job fetched the same rejected photographs again — 29 of
+               * them on 2026-09-17 — and until it ran, those cards were hotlinking the very
+               * scene it had rejected, which for Đak is a broken image.
+               *
+               * Kept only when it *was* a choice: the stored picture differs from the first
+               * candidate the last crawl proposed. A picture that is simply last night's
+               * proposal gives way to tonight's, so a better first picture — an adapter
+               * that learns to read the shop's main image, say — still reaches the card
+               * instead of being frozen out by the rule meant to protect the job's picks.
+               * And a picture the shop no longer lists always gives way.
+               */
+              imageUrl: sql`case
+                when ${offer.imageUrl} is distinct from ${offer.imageUrls}[1]
+                  and ${offer.imageUrl} = any(excluded.image_urls)
+                  then ${offer.imageUrl}
+                else excluded.image_url
+              end`,
               imageUrls: normalized.imageUrls,
               gender: normalized.gender,
               priceMinor: normalized.price.amountMinor,
