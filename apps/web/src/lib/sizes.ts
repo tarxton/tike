@@ -13,6 +13,20 @@
 export const ADULT_MIN_SIZE = 36;
 
 /**
+ * The picker's base grid: every whole size from 28 to 51.
+ *
+ * Twenty-four sizes, so three full rows of eight or four of six. 51 is the top because
+ * nothing larger was stocked anywhere (52 to 55 had no offers on 2026-09-17), and the range
+ * reaches down to 28 instead: a row of numbers no shop sells would be decoration.
+ *
+ * Fixed rather than taken from the catalogue so the grid keeps its shape when a thinly
+ * stocked end sells out — 51 had two offers and 50 four. A base size nobody stocks is shown
+ * greyed out and cannot be ticked, so the picker never offers a number that returns nothing.
+ */
+export const BASE_MIN_SIZE = 28;
+export const BASE_MAX_SIZE = 51;
+
+/**
  * "45,46" -> [45, 46]. Ignores junk, de-duplicates, sorts.
  *
  * Note the guard against 0: an earlier toggle-button design relied on `Number('')`
@@ -26,7 +40,7 @@ export function parseSizes(raw: string | null | undefined): number[] {
       raw
         .split(',')
         .map((part) => Number(part.trim()))
-        .filter((n) => Number.isFinite(n) && n >= 15 && n <= 52),
+        .filter((n) => Number.isFinite(n) && n >= 15 && n <= BASE_MAX_SIZE + 1),
     ),
   ].sort((a, b) => a - b);
 }
