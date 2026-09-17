@@ -229,17 +229,6 @@ export default async function Results({
           sizes={sizes}
           selected={selected}
           showKids={showKids}
-          kidsHref={buildHref({
-            sizes: selected,
-            brands,
-            model: modelKey,
-            query,
-            kids: !showKids,
-            sort,
-            onSale,
-            shops,
-            genders,
-          })}
           query={query}
           brands={brands}
           compact

@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { ModelSearch } from './model-search';
-import { formatSize, t } from '@/lib/messages';
+import { SizePicker } from './size-picker';
+import { t } from '@/lib/messages';
 import { applyFilters } from '@/lib/size';
-import { ADULT_MIN_SIZE } from '@/lib/sizes';
 
 /**
  * Search box and size picker, in a single form.
@@ -12,7 +12,7 @@ import { ADULT_MIN_SIZE } from '@/lib/sizes';
  * turned a model search into a bare size search.
  *
  * Sizes are checkboxes rather than submit buttons so ticking one composes the query
- * instead of running it. Nothing here needs client-side JavaScript.
+ * instead of running it. Nothing here needs client-side JavaScript; see SizePicker.
  *
  * One submit button, and it sits after the sizes rather than beside the search box.
  * A button glued to the input reads as "search this text" and hides the fact that the
@@ -23,7 +23,6 @@ export function Filters({
   sizes,
   selected,
   showKids = false,
-  kidsHref,
   query,
   brands = [],
   compact = false,
@@ -31,8 +30,8 @@ export function Filters({
 }: {
   sizes: number[];
   selected: number[];
+  /** A URL that asked for children's shoes opens the picker on every size. */
   showKids?: boolean;
-  kidsHref: string;
   query?: string;
   brands?: string[];
   /** Results page: tighter spacing, since the grid is above the fold. */
@@ -40,9 +39,6 @@ export function Filters({
   /** Where "clear" returns to. On the home page, clearing must not run a search. */
   returnTo?: string;
 }) {
-  const visible = showKids ? sizes : sizes.filter((s) => s >= ADULT_MIN_SIZE);
-  const kidsCount = sizes.filter((s) => s < ADULT_MIN_SIZE).length;
-
   return (
     <form action={applyFilters} className={compact ? 'space-y-3' : 'space-y-5'}>
       {showKids ? <input type="hidden" name="djecije" value="1" /> : null}
@@ -50,38 +46,7 @@ export function Filters({
 
       <ModelSearch defaultValue={query} />
 
-      <fieldset>
-        <legend className="mb-2 text-sm font-medium text-neutral-700">{t.chooseSize}</legend>
-
-        <div className="flex flex-wrap gap-2">
-          {visible.map((size) => (
-            // The checked styling must come from CSS, not from the server-rendered
-            // `selected` list: the input is visually hidden, so a server-computed class
-            // never changes on click and the button looks dead until the page reloads.
-            // Keyed on the checked state as well as the size, so clearing the filters
-            // actually unticks them. These are uncontrolled inputs — `defaultChecked`
-            // applies on mount and never again — and a client navigation reuses the DOM
-            // node, so the chips kept whatever had been clicked while the URL behind them
-            // had already been emptied. Changing the key remounts only the chips that
-            // changed.
-            <label
-              key={`${size}:${selected.includes(size)}`}
-              className="cursor-pointer select-none"
-            >
-              <input
-                type="checkbox"
-                name="velicina"
-                value={size}
-                defaultChecked={selected.includes(size)}
-                className="peer sr-only"
-              />
-              <span className="size-chip">{formatSize(size)}</span>
-            </label>
-          ))}
-        </div>
-
-        <p className="mt-2 text-xs text-neutral-500">{t.multiSizeHint}</p>
-      </fieldset>
+      <SizePicker sizes={sizes} selected={selected} openAll={showKids} />
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <button
@@ -100,16 +65,6 @@ export function Filters({
             className="text-sm text-neutral-600 underline underline-offset-4 hover:text-neutral-900 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
           >
             {t.clearFilters}
-          </Link>
-        ) : null}
-
-        {kidsCount > 0 ? (
-          <Link
-            href={kidsHref}
-            scroll={false}
-            className="text-sm text-neutral-600 underline underline-offset-4 hover:text-neutral-900"
-          >
-            {showKids ? t.hideKids : `${t.showKids} (${kidsCount})`}
           </Link>
         ) : null}
       </div>

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { ADULT_MIN_SIZE, clippedCase, sizeCase, sizesForSlug } from './support/catalogue';
 import { cards, chipsOn, headerSizes, resultCount, sizeLabel } from './support/page-helpers';
 
@@ -94,26 +94,6 @@ test.describe('size filter', () => {
     await expect(page.getByRole('link', { name: 'Obriši filtere' }).last()).toBeVisible();
   });
 
-  test("children's sizes stay behind their toggle", async ({ page }) => {
-    await page.goto('/patike');
-    const picker = page.getByRole('group', { name: 'Tvoj broj' });
-
-    // Results order by price and children's shoes are structurally cheaper, so an
-    // unfiltered search would otherwise open on a wall of them.
-    const adultOnly = await picker
-      .locator('input[name="velicina"]')
-      .evaluateAll((els) => els.map((el) => Number((el as HTMLInputElement).value)));
-    expect(adultOnly.length).toBeGreaterThan(0);
-    expect(Math.min(...adultOnly)).toBeGreaterThanOrEqual(ADULT_MIN_SIZE);
-
-    await page.goto('/patike?djecije=1');
-    const withKids = await page
-      .getByRole('group', { name: 'Tvoj broj' })
-      .locator('input[name="velicina"]')
-      .evaluateAll((els) => els.map((el) => Number((el as HTMLInputElement).value)));
-    expect(Math.min(...withKids)).toBeLessThan(ADULT_MIN_SIZE);
-  });
-
   test('ticking a size runs the search and keeps the typed query', async ({ page }) => {
     const { size } = await sizeCase();
     await page.goto('/patike');
@@ -121,6 +101,16 @@ test.describe('size filter', () => {
     // One form, deliberately: two forms meant clicking a size discarded whatever had
     // been typed, which silently turned a model search into a bare size search.
     await page.getByRole('combobox', { name: 'Pretraži' }).fill('air');
+
+    // Suggestions open over the picker — on a phone they cover the whole grid — so they
+    // are dismissed the way a person would, by tapping outside them. Waited for first,
+    // because tapping before they arrive leaves them to open over the chips afterwards.
+    await page
+      .getByRole('listbox')
+      .waitFor({ timeout: 5_000 })
+      .catch(() => {});
+    await page.locator('header p').first().click();
+    await expect(page.getByRole('listbox')).toHaveCount(0);
 
     // The chip, not the input inside it. The checkbox is `sr-only` — a 1x1 clipped box —
     // and forcing a click onto it toggles in Chromium but not in WebKit, where the mobile
@@ -134,5 +124,110 @@ test.describe('size filter', () => {
     await expect(page).toHaveURL(new RegExp(`velicina=${size}`));
     await expect(page).toHaveURL(/q=air/);
     expect(await headerSizes(page)).toBe(sizeLabel(size));
+  });
+});
+
+/**
+ * The picker itself: whole adult sizes in an even grid, everything else one tap away inside
+ * the same box.
+ *
+ * Asserted by geometry as much as by content, because the request was about shape — the
+ * base sizes in full rows of equal cells, and opening the full view not moving the page.
+ */
+test.describe('size picker', () => {
+  const grid = (page: Page) => page.locator('#velicine-grid');
+  const visibleSizes = (page: Page) =>
+    grid(page)
+      .locator('label')
+      .evaluateAll((labels) =>
+        labels
+          .filter((l) => (l as HTMLElement).offsetParent !== null)
+          .map((l) => Number((l.querySelector('input') as HTMLInputElement).value)),
+      );
+
+  test('shows whole adult sizes in an even grid', async ({ page }) => {
+    await page.goto('/');
+    const sizes = await visibleSizes(page);
+
+    expect(sizes.length).toBeGreaterThan(0);
+    expect(sizes.every((s) => Number.isInteger(s) && s >= ADULT_MIN_SIZE)).toBe(true);
+    // Halves, thirds and children's sizes exist in the catalogue, only not on show.
+    const all = await grid(page).locator('input[name="velicina"]').count();
+    expect(all).toBeGreaterThan(sizes.length);
+
+    const cells = await grid(page)
+      .locator('label')
+      .evaluateAll((labels) =>
+        labels
+          .filter((l) => (l as HTMLElement).offsetParent !== null)
+          .map((l) => Math.round(l.getBoundingClientRect().width)),
+      );
+    expect(new Set(cells).size, 'every cell the same width').toBe(1);
+
+    await expect(page.getByText('Prikaži sve brojeve', { exact: true })).toBeVisible();
+    await expect(page.getByText(/dječije brojeve/)).toHaveCount(0);
+  });
+
+  test('showing every size scrolls inside the box instead of growing it', async ({ page }) => {
+    await page.goto('/');
+    const before = await grid(page).boundingBox();
+    const button = await page.getByRole('button', { name: 'Pretraži' }).boundingBox();
+
+    await page.getByText('Prikaži sve brojeve', { exact: true }).click();
+    await expect(page.getByText('Prikaži manje brojeva', { exact: true })).toBeVisible();
+
+    const sizes = await visibleSizes(page);
+    expect(
+      sizes.some((s) => !Number.isInteger(s)),
+      'halves and thirds shown',
+    ).toBe(true);
+    expect(
+      sizes.some((s) => s < ADULT_MIN_SIZE),
+      "children's sizes shown",
+    ).toBe(true);
+
+    const after = await grid(page).boundingBox();
+    expect(Math.round(after!.height)).toBe(Math.round(before!.height));
+    const scrollable = await grid(page).evaluate((el) => el.scrollHeight > el.clientHeight);
+    expect(scrollable).toBe(true);
+    // Nothing below the picker moved.
+    const buttonAfter = await page.getByRole('button', { name: 'Pretraži' }).boundingBox();
+    expect(Math.round(buttonAfter!.y)).toBe(Math.round(button!.y));
+
+    // It opens on the adult sizes, not on the children's at the top of the list.
+    const first = await grid(page).locator('label[data-base]').first().boundingBox();
+    const box = (await grid(page).boundingBox())!;
+    expect(first!.y).toBeGreaterThanOrEqual(box.y - 1);
+    expect(first!.y + first!.height).toBeLessThanOrEqual(box.y + box.height + 1);
+  });
+
+  test('a half or a third already chosen opens the full view on it', async ({ page }) => {
+    await page.goto('/');
+    // One the catalogue actually stocks, taken from the picker rather than invented.
+    const third = await grid(page)
+      .locator('input[name="velicina"]')
+      .evaluateAll((inputs) =>
+        inputs
+          .map((i) => (i as HTMLInputElement).value)
+          .find((v) => Number(v) >= 40 && !Number.isInteger(Number(v))),
+      );
+    expect(third, 'the catalogue stocks no half or third size at all').toBeTruthy();
+    await page.goto(`/patike?velicina=${third}`);
+
+    const chip = grid(page).locator(`label:has(input[value="${third}"])`);
+    await expect(chip).toBeVisible();
+    await expect(chip.locator('input')).toBeChecked();
+    await expect(page.getByText('Prikaži manje brojeva', { exact: true })).toBeVisible();
+  });
+
+  test.describe('without JavaScript', () => {
+    test.use({ javaScriptEnabled: false });
+
+    test('the full view still opens', async ({ page }) => {
+      await page.goto('/');
+      const base = (await visibleSizes(page)).length;
+      await page.getByText('Prikaži sve brojeve', { exact: true }).click();
+      expect((await visibleSizes(page)).length).toBeGreaterThan(base);
+    });
   });
 });
