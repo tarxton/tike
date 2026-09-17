@@ -17,8 +17,8 @@ export function ShopLogo({
 }: {
   name: string;
   logoUrl: string | null;
-  /** `sm` for the dense result cards, `md` for a product page row. */
-  size?: 'sm' | 'md';
+  /** `xs` for result cards, `sm` for the shop filter chips, `md` for a product page row. */
+  size?: 'xs' | 'sm' | 'md';
   /**
    * The shop's name is already written next to this mark.
    *
@@ -33,7 +33,11 @@ export function ShopLogo({
   // space: Sport Vision's mark is portrait (127x145) while Sport Reality's is 3.6:1, so a
   // shared 3:1 box gave the first a third of its width in logo and two thirds in gap. The
   // cap stops an unusually wide mark from crowding the row.
-  const box = size === 'sm' ? 'h-4 max-w-16' : 'h-7 max-w-24';
+  //
+  // Cards cap width harder than the filter does: three marks and a "+N" have to share a
+  // 141px row on a phone, and Sport Reality's 3.6:1 mark alone took 58px of it — enough to
+  // push the count onto a line of its own on two of the twelve widest cards.
+  const box = size === 'xs' ? 'h-4 max-w-12' : size === 'sm' ? 'h-4 max-w-16' : 'h-7 max-w-24';
 
   if (!logoUrl) {
     // Nothing to draw: the name beside it is already the whole message.

@@ -62,6 +62,7 @@ export const t = {
   backToSearch: 'Nazad na pretragu',
   otherColourways: 'Druge boje ovog modela',
   atShops: 'Cijene po prodavnicama',
+  andMoreShops: 'i još',
   cheapest: 'najjeftinije',
   yourSize: 'tvoj broj',
   noSizeHere: 'nema tvoj broj',

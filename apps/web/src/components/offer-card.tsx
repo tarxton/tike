@@ -81,11 +81,15 @@ function CardLink({
 /** How many size chips fit on a card before the rest become "+N". */
 const CHIPS = 10;
 
+/** Shop marks shown on a card before the rest become "+N". */
+const MAX_LOGOS = 3;
+
 export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: number[] }) {
   // The filtered size is never the one dropped: a card on a page filtered to 46 that
   // shows 36-41 and a "+9" gives no sign it has the one number the visitor came for.
   const shownSizes = chipsToShow(offer.sizesEu, sizes, CHIPS);
   const extra = offer.sizesEu.length - shownSizes.length;
+  const hiddenShops = offer.shops.slice(MAX_LOGOS);
   const multiShop = offer.shopCount > 1;
   // Two shops at the same price is common — Buzz and Sport Vision share a price list —
   // and printing "86,00 – 86,00 KM" for it would be noise dressed as information.
@@ -167,11 +171,29 @@ export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: 
             {/*
              * Whose prices these are, not just how many. A count alone makes someone open
              * the page to find out whether the shops are ones they would buy from.
+             *
+             * Three at most, then "+N". Five marks on a phone-width card wrapped into two
+             * rows and pushed the price range onto a third line, on the very cards that
+             * matter most — a shoe five shops carry is the comparison the site exists for.
+             * The shops arrive cheapest first, so the three shown are the three worth
+             * seeing, and the product page lists every one.
              */}
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              {offer.shops.map((shop) => (
-                <ShopLogo key={shop.slug} name={shop.name} logoUrl={shop.logoUrl} size="sm" />
+            <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
+              {offer.shops.slice(0, MAX_LOGOS).map((shop) => (
+                <ShopLogo key={shop.slug} name={shop.name} logoUrl={shop.logoUrl} size="xs" />
               ))}
+              {hiddenShops.length > 0 ? (
+                <span
+                  className="text-[11px] font-medium text-neutral-500 tabular-nums"
+                  title={hiddenShops.map((shop) => shop.name).join(', ')}
+                >
+                  <span aria-hidden="true">+{hiddenShops.length}</span>
+                  {/* The logos read out by name, so the rest are named too rather than counted. */}
+                  <span className="sr-only">
+                    {t.andMoreShops} {hiddenShops.map((shop) => shop.name).join(', ')}
+                  </span>
+                </span>
+              ) : null}
             </div>
 
             {multiShop ? (
