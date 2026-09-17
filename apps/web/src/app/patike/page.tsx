@@ -74,12 +74,24 @@ export default async function Results({
   );
 
   // Defined once so the fuzzy retry below cannot drift from the search it is retrying.
+  /*
+   * A chosen model brings its children's shoes with it.
+   *
+   * The default hides listings whose whole size run is children's, so an unfiltered search
+   * is not a wall of cheap kids' shoes. But picking one model from the dropdown is an
+   * explicit choice, and the family may only exist as a child's shoe: "Jordan 1" is one
+   * baby shoe at Buzz in 16-19½, so choosing it showed "Nema rezultata" — a row the
+   * dropdown had just offered, leading nowhere. Same rule the colourway shelf already
+   * uses, and for the same reason.
+   */
+  const includeKids = showKids || Boolean(modelKey);
+
   const searchArgs = {
     sizesEu: selected,
     brands,
     modelKey,
     query,
-    includeKids: showKids,
+    includeKids,
     onSale,
     shops,
     genders,
@@ -95,7 +107,7 @@ export default async function Results({
       sizesEu: selected,
       modelKey,
       query,
-      includeKids: showKids,
+      includeKids,
       onSale,
       shops,
       genders,

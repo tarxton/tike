@@ -228,6 +228,22 @@ test.describe('size picker', () => {
     const box = (await grid(page).boundingBox())!;
     expect(first!.y).toBeGreaterThanOrEqual(box.y - 1);
     expect(first!.y + first!.height).toBeLessThanOrEqual(box.y + box.height + 1);
+
+    // A scrollbar of our own, because iOS draws none until a scroll is under way — the box
+    // otherwise reads as one that simply cuts the list off.
+    const thumb = page.locator('#velicine-thumb');
+    await expect(thumb).toBeVisible();
+    const top = async () => {
+      const t = await page.locator('.size-scrollbar').boundingBox();
+      const h = await thumb.boundingBox();
+      return Math.round(h!.y - t!.y);
+    };
+    const thumbBefore = await top();
+    await grid(page).evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    await page.waitForTimeout(150);
+    expect(await top(), 'the thumb follows the scroll').toBeGreaterThan(thumbBefore);
   });
 
   test('a size in the grid that nobody stocks cannot be ticked', async ({ page }) => {

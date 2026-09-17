@@ -65,6 +65,7 @@ let cache: {
   alias?: Promise<{ from: string; to: string } | null>;
   term?: Promise<string>;
   clipped?: Promise<ClippedCase | null>;
+  kidsOnly?: Promise<{ key: string; model: string } | null>;
 } = { offers: {} };
 
 /** Only useful to a test that deliberately wants a second look at the catalogue. */
@@ -259,6 +260,41 @@ export function clippedCase(): Promise<ClippedCase | null> {
     return rows[0] ?? null;
   })();
   return cache.clipped;
+}
+
+/**
+ * A model family whose every offer is a children's shoe.
+ *
+ * The case that made choosing a model from the dropdown land on "Nema rezultata": the
+ * default hides listings whose whole size run is children's, and "Jordan 1" is one baby
+ * shoe at Buzz.
+ */
+export function kidsOnlyFamily(): Promise<{ key: string; model: string } | null> {
+  cache.kidsOnly ??= (async () => {
+    const rows = (await sql()`
+      with family as (
+        select btrim(
+                 regexp_replace(
+                   unaccent(lower(coalesce(b.name, '') || ' ' || p.model)),
+                   '[^a-z0-9]+', '-', 'g'
+                 ),
+                 '-'
+               ) as key,
+               min(p.model) as model,
+               max(f.size_eu) as biggest
+        from product p
+        left join brand b on b.id = p.brand_id
+        join offer o on o.product_id = p.id and o.in_stock
+        join shop s on s.id = o.shop_id and s.active
+        join offer_size f on f.offer_id = o.id and f.in_stock
+        where p.model <> ''
+        group by 1
+      )
+      select key, model from family where biggest < ${ADULT_MIN_SIZE} order by key limit 1
+    `) as { key: string; model: string }[];
+    return rows[0] ?? null;
+  })();
+  return cache.kidsOnly;
 }
 
 /** A slug a product has outgrown, which must still resolve. */
