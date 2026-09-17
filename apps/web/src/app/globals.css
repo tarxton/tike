@@ -62,23 +62,50 @@
 }
 
 /*
- * The size picker's grid. Equal columns, so the whole adult sizes form full rows — 36 to 51
- * is sixteen numbers, four rows of four on a phone and two rows of eight wider — and chips
+ * The size picker's grid. Equal columns, so the base sizes form full rows — 28 to 51 is
+ * twenty-four numbers, four rows of six on a phone and three rows of eight wider — and chips
  * stop taking their width from however many characters "44⅔" happens to be.
  */
 .size-grid {
   --chip-height: calc(2.25rem + 2px);
   --gap: 0.5rem;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--gap);
   /* Room for the focus ring, which the scrolling view would otherwise clip at its edges. */
   padding: 4px;
   margin: -4px;
 }
 
+/*
+ * Every chip exactly the same box, whatever it says.
+ *
+ * Width comes from the grid; height is pinned here rather than left to the text. "½", "⅓"
+ * and "⅔" are often drawn from a fallback font whose ascent and descent differ from the
+ * digits around them, and on some devices that stretched the line box — a half-size button
+ * a pixel or two taller than the whole size beside it. A fixed height with the text centred
+ * inside it cannot be stretched by any glyph.
+ */
 .size-grid .size-chip {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--chip-height);
+  /* Six to a row on a 320px phone leaves 40px a cell, and "44⅔" needs most of it. */
+  padding: 0 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* A size nobody stocks today: kept in its place in the grid, visibly not a choice. */
+.peer:disabled ~ .size-chip {
+  background: #fafafa;
+  border-color: #ececec;
+  color: #b5b5b5;
+}
+
+.peer:disabled ~ .size-chip:hover {
+  border-color: #ececec;
 }
 
 @media (min-width: 640px) {

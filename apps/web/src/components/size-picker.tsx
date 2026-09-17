@@ -1,14 +1,19 @@
 import { formatSize, t } from '@/lib/messages';
-import { ADULT_MIN_SIZE } from '@/lib/sizes';
+import { BASE_MAX_SIZE, BASE_MIN_SIZE } from '@/lib/sizes';
 import { SizeGridScroll } from './size-grid-scroll';
 
 const ALL_SIZES = 'velicine-sve';
 const GRID = 'velicine-grid';
 
-/** The numbers most people wear: whole adult sizes. Halves, thirds and children's wait. */
+/** The base grid: whole sizes 28 to 51. Halves, thirds and the rest wait behind the toggle. */
 export function isBaseSize(size: number): boolean {
-  return size >= ADULT_MIN_SIZE && Number.isInteger(size);
+  return Number.isInteger(size) && size >= BASE_MIN_SIZE && size <= BASE_MAX_SIZE;
 }
+
+const BASE_SIZES = Array.from(
+  { length: BASE_MAX_SIZE - BASE_MIN_SIZE + 1 },
+  (_, i) => BASE_MIN_SIZE + i,
+);
 
 /**
  * The size picker, as a grid that never changes size.
@@ -19,9 +24,11 @@ export function isBaseSize(size: number): boolean {
  * everyone is looking for a whole number, and the thirds only exist because adidas sizes
  * that way.
  *
- * Now the whole adult sizes sit in an even grid — four columns on a phone, eight wider —
- * and "Prikaži sve brojeve" opens everything else inside the same box, which scrolls rather
- * than grows. The page below it does not move when you open it.
+ * Now whole sizes 28 to 51 sit in an even grid — four rows of six on a phone, three rows of
+ * eight wider — and "Prikaži sve brojeve" opens everything else inside the same box, which
+ * scrolls rather than grows. The page below it does not move when you open it. The range
+ * is fixed, so the grid keeps its shape; a size nobody stocks is shown greyed out and cannot
+ * be ticked.
  *
  * No JavaScript needed for any of that. The toggle is a checkbox the grid is a sibling of,
  * the same pattern as the chips themselves and the brand expander: every chip is always in
@@ -39,7 +46,10 @@ export function SizePicker({
   /** Start in the full view — for a URL that already asked for children's sizes. */
   openAll?: boolean;
 }) {
-  const base = sizes.filter(isBaseSize);
+  const stocked = new Set(sizes);
+  // Every base size, stocked or not, plus whatever else the catalogue has, in one ascending
+  // list — the full view reads in order and the base view is that list with gaps hidden.
+  const shown = [...new Set([...BASE_SIZES, ...sizes])].sort((a, b) => a - b);
   // A half or a third that is already ticked must be on screen, or the only sign of it is
   // the results quietly narrowing to a size the visitor cannot see selected.
   const startOpen = openAll || selected.some((s) => !isBaseSize(s));
@@ -68,31 +78,38 @@ export function SizePicker({
           {
             // Rows the base sizes need at each column count. The full view is held to the
             // same height, so opening it cannot push anything below it down the page.
-            '--rows-narrow': Math.max(1, Math.ceil(base.length / 4)),
-            '--rows-wide': Math.max(1, Math.ceil(base.length / 8)),
+            '--rows-narrow': Math.ceil(BASE_SIZES.length / 6),
+            '--rows-wide': Math.ceil(BASE_SIZES.length / 8),
           } as React.CSSProperties
         }
       >
-        {sizes.map((size) => (
-          // Keyed on the checked state as well as the size, so clearing the filters really
-          // unticks them. These are uncontrolled inputs — `defaultChecked` applies on mount
-          // and never again — and a client navigation reuses the DOM node.
-          <label
-            key={`${size}:${selected.includes(size)}`}
-            data-extra={isBaseSize(size) ? undefined : ''}
-            data-base={isBaseSize(size) ? '' : undefined}
-            className="cursor-pointer select-none"
-          >
-            <input
-              type="checkbox"
-              name="velicina"
-              value={size}
-              defaultChecked={selected.includes(size)}
-              className="peer sr-only"
-            />
-            <span className="size-chip">{formatSize(size)}</span>
-          </label>
-        ))}
+        {shown.map((size) => {
+          const available = stocked.has(size);
+          return (
+            // Keyed on the checked state as well as the size, so clearing the filters really
+            // unticks them. These are uncontrolled inputs — `defaultChecked` applies on mount
+            // and never again — and a client navigation reuses the DOM node.
+            <label
+              key={`${size}:${selected.includes(size)}:${available}`}
+              data-extra={isBaseSize(size) ? undefined : ''}
+              data-base={isBaseSize(size) ? '' : undefined}
+              title={available ? undefined : t.sizeUnavailable}
+              className={available ? 'cursor-pointer select-none' : 'cursor-default select-none'}
+            >
+              <input
+                type="checkbox"
+                name="velicina"
+                value={size}
+                defaultChecked={selected.includes(size)}
+                // Disabled rather than left out: the grid keeps its shape, and a disabled
+                // box is neither focusable nor submitted, so it cannot produce an empty page.
+                disabled={!available}
+                className="peer sr-only"
+              />
+              <span className="size-chip">{formatSize(size)}</span>
+            </label>
+          );
+        })}
       </div>
 
       <p className="mt-2 text-xs text-neutral-500">{t.multiSizeHint}</p>

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ADULT_MIN_SIZE, clippedCase, sizeCase, sizesForSlug } from './support/catalogue';
+import { clippedCase, sizeCase, sizesForSlug } from './support/catalogue';
 import { cards, chipsOn, headerSizes, resultCount, sizeLabel } from './support/page-helpers';
+import { BASE_MAX_SIZE, BASE_MIN_SIZE } from '../src/lib/sizes';
 
 /**
  * The size filter, which is the product.
@@ -145,27 +146,55 @@ test.describe('size picker', () => {
           .map((l) => Number((l.querySelector('input') as HTMLInputElement).value)),
       );
 
-  test('shows whole adult sizes in an even grid', async ({ page }) => {
+  test('shows every whole size from 28 to 51 in an even grid', async ({ page }) => {
     await page.goto('/');
     const sizes = await visibleSizes(page);
 
-    expect(sizes.length).toBeGreaterThan(0);
-    expect(sizes.every((s) => Number.isInteger(s) && s >= ADULT_MIN_SIZE)).toBe(true);
-    // Halves, thirds and children's sizes exist in the catalogue, only not on show.
+    // The whole range, always, so the grid keeps its shape.
+    const expected = Array.from(
+      { length: BASE_MAX_SIZE - BASE_MIN_SIZE + 1 },
+      (_, i) => BASE_MIN_SIZE + i,
+    );
+    expect(sizes).toEqual(expected);
+    // Halves, thirds and the smallest sizes exist in the catalogue, only not on show.
     const all = await grid(page).locator('input[name="velicina"]').count();
     expect(all).toBeGreaterThan(sizes.length);
 
-    const cells = await grid(page)
+    const layout = await grid(page)
       .locator('label')
-      .evaluateAll((labels) =>
-        labels
-          .filter((l) => (l as HTMLElement).offsetParent !== null)
-          .map((l) => Math.round(l.getBoundingClientRect().width)),
-      );
-    expect(new Set(cells).size, 'every cell the same width').toBe(1);
+      .evaluateAll((labels) => {
+        const shown = labels.filter((l) => (l as HTMLElement).offsetParent !== null);
+        return {
+          rows: new Set(shown.map((l) => Math.round(l.getBoundingClientRect().top))).size,
+        };
+      });
+    // Full rows: three of eight wide, four of six on a phone.
+    expect(expected.length % layout.rows, `${expected.length} sizes in ${layout.rows} rows`).toBe(
+      0,
+    );
+    expect(layout.rows).toBeGreaterThanOrEqual(3);
 
     await expect(page.getByText('Prikaži sve brojeve', { exact: true })).toBeVisible();
     await expect(page.getByText(/dječije brojeve/)).toHaveCount(0);
+  });
+
+  test('every size button is the same size, halves and thirds included', async ({ page }) => {
+    await page.goto('/');
+    await page.getByText('Prikaži sve brojeve', { exact: true }).click();
+
+    const boxes = await grid(page)
+      .locator('label .size-chip')
+      .evaluateAll((chips) =>
+        chips
+          .filter((c) => (c as HTMLElement).offsetParent !== null)
+          .map((c) => {
+            const r = c.getBoundingClientRect();
+            return { text: c.textContent, size: `${Math.round(r.width)}x${Math.round(r.height)}` };
+          }),
+      );
+    expect(boxes.some((b) => /[½⅓⅔]/.test(b.text ?? ''))).toBe(true);
+    const sizes = new Set(boxes.map((b) => b.size));
+    expect([...sizes], 'distinct button sizes in the full view').toHaveLength(1);
   });
 
   test('showing every size scrolls inside the box instead of growing it', async ({ page }) => {
@@ -182,8 +211,8 @@ test.describe('size picker', () => {
       'halves and thirds shown',
     ).toBe(true);
     expect(
-      sizes.some((s) => s < ADULT_MIN_SIZE),
-      "children's sizes shown",
+      sizes.some((s) => s < BASE_MIN_SIZE),
+      'sizes below the grid shown',
     ).toBe(true);
 
     const after = await grid(page).boundingBox();
@@ -199,6 +228,17 @@ test.describe('size picker', () => {
     const box = (await grid(page).boundingBox())!;
     expect(first!.y).toBeGreaterThanOrEqual(box.y - 1);
     expect(first!.y + first!.height).toBeLessThanOrEqual(box.y + box.height + 1);
+  });
+
+  test('a size in the grid that nobody stocks cannot be ticked', async ({ page }) => {
+    await page.goto('/');
+    const unstocked = grid(page).locator('label:has(input:disabled)');
+    // Today every size from 28 to 51 is stocked somewhere; 51 had two offers and 50 four,
+    // so this is the test that runs the day one of them sells out.
+    test.skip((await unstocked.count()) === 0, 'every size in the grid is stocked today');
+
+    await unstocked.first().click({ force: true });
+    await expect(unstocked.first().locator('input')).not.toBeChecked();
   });
 
   test('a half or a third already chosen opens the full view on it', async ({ page }) => {

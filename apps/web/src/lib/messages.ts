@@ -13,6 +13,7 @@ export const t = {
   chooseSizeShort: 'Broj',
   showAllSizes: 'Prikaži sve brojeve',
   showBaseSizes: 'Prikaži manje brojeva',
+  sizeUnavailable: 'Nijedna prodavnica trenutno nema ovaj broj.',
   multiSizeHint: 'Možeš odabrati više brojeva odjednom.',
   discount: 'Popust',
   oldPrice: 'Stara cijena',
