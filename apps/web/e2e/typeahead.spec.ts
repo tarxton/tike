@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { searchTerm, sizeCase } from './support/catalogue';
+import { kidsOnlyFamily, searchTerm, sizeCase } from './support/catalogue';
 import { cards, suggestFor } from './support/page-helpers';
 
 /**
@@ -44,22 +44,47 @@ test.describe('model typeahead', () => {
     const options = (await suggestFor(page, term.slice(0, 4))).getByRole('option');
     await expect(options.first()).toBeVisible();
 
-    // Families with several colourways land on a filtered grid; a family holding one
-    // colourway goes straight to its product page. Both are correct, so the assertion
-    // follows whichever it was.
+    // Every row lands on filtered results, one colourway or thirty. Going straight to a
+    // product page for a single-colourway family read as a shortcut and behaved as a trap.
     await options.first().click();
-    await page.waitForURL(/\/patika\/|model=/);
+    await page.waitForURL(/model=/);
+    expect(page.url()).not.toContain('/patika/');
 
-    if (page.url().includes('model=')) {
-      await expect(page.getByText('Model')).toBeVisible();
-      // A model belongs to exactly one brand, so a brand filter would collapse to a
-      // single chip already implied by the model above it.
-      await expect(page.getByRole('navigation', { name: 'Brend' })).toHaveCount(0);
-      await expect(page.getByRole('link', { name: 'prikaži sve' })).toBeVisible();
-      expect(await cards(page).count()).toBeGreaterThan(0);
-    } else {
-      await expect(page.locator('h1')).not.toBeEmpty();
-    }
+    await expect(page.getByText('Model')).toBeVisible();
+    // A model belongs to exactly one brand, so a brand filter would collapse to a single
+    // chip already implied by the model above it.
+    await expect(page.getByRole('navigation', { name: 'Brend' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'prikaži sve' })).toBeVisible();
+    expect(await cards(page).count()).toBeGreaterThan(0);
+  });
+
+  test('a model picked on the home page keeps the sizes ticked there', async ({ page }) => {
+    const { size } = await sizeCase();
+    await page.goto('/');
+
+    // The home page has never submitted the form, so the URL knows nothing about the
+    // sizes on screen: picking a model used to throw the ticked size away.
+    await page.locator(`label:has(input[name="velicina"][value="${size}"])`).click();
+    const term = await searchTerm();
+    const options = (await suggestFor(page, term.slice(0, 4))).getByRole('option');
+    await expect(options.first()).toBeVisible();
+    await options.first().click();
+
+    await page.waitForURL(/model=/);
+    const url = new URL(page.url());
+    expect(url.pathname).toBe('/patike');
+    expect(url.searchParams.get('velicina')).toBe(String(size));
+    expect(url.searchParams.get('model')).toBeTruthy();
+  });
+
+  test("a model that only exists as a child's shoe still shows it", async ({ page }) => {
+    const family = await kidsOnlyFamily();
+    test.skip(family === null, 'no family in the catalogue is children-only right now');
+
+    await page.goto(`/patike?model=${encodeURIComponent(family!.key)}`);
+    // Children's listings are hidden by default so an unfiltered search is not a wall of
+    // them, but a model chosen by name is an explicit request for that model.
+    expect(await cards(page).count()).toBeGreaterThan(0);
   });
 
   test('the endpoint answers on its own', async ({ request }) => {

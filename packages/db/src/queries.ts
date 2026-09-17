@@ -225,14 +225,6 @@ export interface ModelSuggestion {
   model: string;
   /** How many colourways sit behind this row. */
   colourways: number;
-  /**
-   * Where picking this row goes when it holds exactly one colourway.
-   *
-   * Half of all families do, and sending those straight to the product page is the
-   * whole point of the feature: you picked the shoe, so show its prices. A family with
-   * several colourways has no single page to land on and goes to filtered results.
-   */
-  slug: string | null;
   /** Shops carrying any colourway in the family, for a "u N prodavnica" hint. */
   shopCount: number;
 }
@@ -262,7 +254,6 @@ export async function modelSuggestions(
       -- so the shortest is the cleanest: "GEL-KAYANO 32" over "gel‑kayano™ 32".
       (array_agg(p.model order by length(p.model), p.model))[1] as "model",
       count(distinct p.id)::int                                 as "colourways",
-      min(p.slug)                                               as "slug",
       count(distinct o.shop_id)::int                            as "shop_count",
       max(similarity(${familyText}, ${normalized}))             as "score"
     from product p
@@ -293,9 +284,6 @@ export async function modelSuggestions(
     brand: r.brand === null ? null : String(r.brand),
     model: String(r.model),
     colourways: Number(r.colourways),
-    // Only a single-colourway family can be sent to a product page; for the rest the
-    // slug is one arbitrary member of the group and would be a wrong destination.
-    slug: Number(r.colourways) === 1 && r.slug !== null ? String(r.slug) : null,
     shopCount: Number(r.shop_count),
   }));
 }

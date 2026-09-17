@@ -23,8 +23,13 @@ const MIN_QUERY = 2;
  *
  * Suggestions are model *families* rather than products, because a product is one
  * colourway — listing those would put "AIR FORCE 1 '07" in the dropdown thirty times.
- * A family holding a single colourway goes straight to its product page; one holding
- * several goes to results filtered to that model, which is the colour picker.
+ * Every row goes to results filtered to that model, carrying the ticked sizes with it.
+ *
+ * A family holding one colourway used to go straight to that product's page. It read as a
+ * shortcut and behaved as a trap: picking "Air Jordan 1" landed on a child's Air Jordan 1,
+ * because that was the only colourway left in stock, with the size filter dropped on the
+ * way and no sign of what had been narrowed. One row now means one destination, whether it
+ * holds one colourway or thirty.
  */
 export function ModelSearch({ defaultValue }: { defaultValue?: string }) {
   const router = useRouter();
@@ -134,12 +139,30 @@ export function ModelSearch({ defaultValue }: { defaultValue?: string }) {
   };
 
   const hrefFor = (s: ModelSuggestion) => {
-    if (s.slug) return `/patika/${s.slug}`;
     const sp = new URLSearchParams(window.location.search);
     sp.delete('q');
     sp.delete('brend');
     sp.delete('strana');
     sp.set('model', s.key);
+
+    /*
+     * The sizes that are ticked, not the ones the URL happens to carry.
+     *
+     * This row is a link the component builds itself, so it skips the form around it —
+     * and on the home page the form has never been submitted, so the URL knows nothing
+     * about the sizes on screen. Picking a model after ticking 44 threw the 44 away and
+     * opened the whole catalogue of that model. Reading the boxes covers the results page
+     * too, where someone can retick a size and pick a model without submitting in between.
+     */
+    const form = boxRef.current?.closest('form');
+    const ticked = form
+      ? [...form.querySelectorAll<HTMLInputElement>('input[name="velicina"]:checked')].map(
+          (input) => input.value,
+        )
+      : [];
+    if (ticked.length > 0) sp.set('velicina', ticked.join(','));
+    else sp.delete('velicina');
+
     return `/patike?${sp.toString()}`;
   };
 
@@ -155,9 +178,7 @@ export function ModelSearch({ defaultValue }: { defaultValue?: string }) {
     setValue([s.brand, s.model].filter(Boolean).join(' '));
     const href = hrefFor(s);
     router.push(href);
-    // Landing on a product page moves the reader anyway; only a filtered grid needs
-    // carrying down to the results it just changed.
-    if (!s.slug) scrollToResults(href);
+    scrollToResults(href);
   };
 
   // Stale rows from a longer query stay in state while the user deletes back past the

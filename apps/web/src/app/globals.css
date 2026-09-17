@@ -119,27 +119,75 @@
   display: none;
 }
 
-.peer:checked ~ .size-grid [data-extra] {
+.peer:checked ~ .size-grid-wrap [data-extra] {
   display: block;
 }
 
 /*
  * The full view keeps the base view's height and scrolls, so opening it moves nothing
  * below it. The height is computed from the row count the base sizes need at this width,
- * which the component passes in, rather than hard-coded to sixteen sizes.
+ * which the component passes in, rather than hard-coded to a fixed count.
  */
-.peer:checked ~ .size-grid {
+.peer:checked ~ .size-grid-wrap .size-grid {
   height: calc(
     var(--rows-narrow) * var(--chip-height) + (var(--rows-narrow) - 1) * var(--gap) + 8px
   );
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* Where a browser styles its own scrollbar, this is the one to use. */
+  scrollbar-width: thin;
+  scrollbar-color: #a3a3a3 #f0f0f0;
 }
 
 @media (min-width: 640px) {
-  .peer:checked ~ .size-grid {
+  .peer:checked ~ .size-grid-wrap .size-grid {
     height: calc(var(--rows-wide) * var(--chip-height) + (var(--rows-wide) - 1) * var(--gap) + 8px);
   }
+}
+
+/*
+ * A scrollbar of our own, for the browsers that hide theirs.
+ *
+ * iOS shows an overlay scrollbar only while a scroll is happening, and ignores
+ * `::-webkit-scrollbar` entirely, so the full view read as a box that cut the list off —
+ * reported from an iPhone 15. The track sits in a gutter beside the grid, never over the
+ * chips, and exists only while the full view is open. The thumb's height and position come
+ * from the scroll position, in SizeGridScroll.
+ */
+.size-grid-wrap {
+  position: relative;
+}
+
+.size-scrollbar {
+  display: none;
+}
+
+.peer:checked ~ .size-grid-wrap {
+  padding-right: 16px;
+}
+
+.peer:checked ~ .size-grid-wrap .size-scrollbar {
+  display: block;
+  position: absolute;
+  top: 4px;
+  right: 0;
+  bottom: 4px;
+  width: 8px;
+  border-radius: 999px;
+  background: #e5e5e5;
+}
+
+.size-scrollbar-thumb {
+  --thumb-height: 30%;
+  --thumb-top: 0%;
+  position: absolute;
+  left: 0;
+  width: 8px;
+  height: var(--thumb-height);
+  top: var(--thumb-top);
+  border-radius: 999px;
+  /* Dark enough to read as a control at arm's length, which the iOS hairline was not. */
+  background: #737373;
 }
 
 body {

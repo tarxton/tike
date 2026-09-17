@@ -4,6 +4,7 @@ import { SizeGridScroll } from './size-grid-scroll';
 
 const ALL_SIZES = 'velicine-sve';
 const GRID = 'velicine-grid';
+const THUMB = 'velicine-thumb';
 
 /** The base grid: whole sizes 28 to 51. Halves, thirds and the rest wait behind the toggle. */
 export function isBaseSize(size: number): boolean {
@@ -71,45 +72,60 @@ export function SizePicker({
         className="peer sr-only"
       />
 
-      <div
-        id={GRID}
-        className="size-grid"
-        style={
-          {
-            // Rows the base sizes need at each column count. The full view is held to the
-            // same height, so opening it cannot push anything below it down the page.
-            '--rows-narrow': Math.ceil(BASE_SIZES.length / 6),
-            '--rows-wide': Math.ceil(BASE_SIZES.length / 8),
-          } as React.CSSProperties
-        }
-      >
-        {shown.map((size) => {
-          const available = stocked.has(size);
-          return (
-            // Keyed on the checked state as well as the size, so clearing the filters really
-            // unticks them. These are uncontrolled inputs — `defaultChecked` applies on mount
-            // and never again — and a client navigation reuses the DOM node.
-            <label
-              key={`${size}:${selected.includes(size)}:${available}`}
-              data-extra={isBaseSize(size) ? undefined : ''}
-              data-base={isBaseSize(size) ? '' : undefined}
-              title={available ? undefined : t.sizeUnavailable}
-              className={available ? 'cursor-pointer select-none' : 'cursor-default select-none'}
-            >
-              <input
-                type="checkbox"
-                name="velicina"
-                value={size}
-                defaultChecked={selected.includes(size)}
-                // Disabled rather than left out: the grid keeps its shape, and a disabled
-                // box is neither focusable nor submitted, so it cannot produce an empty page.
-                disabled={!available}
-                className="peer sr-only"
-              />
-              <span className="size-chip">{formatSize(size)}</span>
-            </label>
-          );
-        })}
+      {/*
+       * Wrapped so the scrollbar can sit beside the grid rather than inside it: a track
+       * drawn as a grid child would take a cell, and one drawn over the chips would cover
+       * the last column's numbers.
+       */}
+      <div className="size-grid-wrap">
+        <div
+          id={GRID}
+          className="size-grid"
+          style={
+            {
+              // Rows the base sizes need at each column count. The full view is held to the
+              // same height, so opening it cannot push anything below it down the page.
+              '--rows-narrow': Math.ceil(BASE_SIZES.length / 6),
+              '--rows-wide': Math.ceil(BASE_SIZES.length / 8),
+            } as React.CSSProperties
+          }
+        >
+          {shown.map((size) => {
+            const available = stocked.has(size);
+            return (
+              // Keyed on the checked state as well as the size, so clearing the filters really
+              // unticks them. These are uncontrolled inputs — `defaultChecked` applies on mount
+              // and never again — and a client navigation reuses the DOM node.
+              <label
+                key={`${size}:${selected.includes(size)}:${available}`}
+                data-extra={isBaseSize(size) ? undefined : ''}
+                data-base={isBaseSize(size) ? '' : undefined}
+                title={available ? undefined : t.sizeUnavailable}
+                className={available ? 'cursor-pointer select-none' : 'cursor-default select-none'}
+              >
+                <input
+                  type="checkbox"
+                  name="velicina"
+                  value={size}
+                  defaultChecked={selected.includes(size)}
+                  // Disabled rather than left out: the grid keeps its shape, and a disabled
+                  // box is neither focusable nor submitted, so it cannot produce an empty page.
+                  disabled={!available}
+                  className="peer sr-only"
+                />
+                <span className="size-chip">{formatSize(size)}</span>
+              </label>
+            );
+          })}
+        </div>
+        {/*
+         * Ours rather than the browser's, because iOS draws none until a scroll is under
+         * way and ignores `::-webkit-scrollbar`, which made the box look like it simply cut
+         * the list off. Hidden from screen readers: it says nothing the list does not.
+         */}
+        <div className="size-scrollbar" aria-hidden="true">
+          <div id={THUMB} className="size-scrollbar-thumb" />
+        </div>
       </div>
 
       <p className="mt-2 text-xs text-neutral-500">{t.multiSizeHint}</p>
@@ -131,7 +147,7 @@ export function SizePicker({
         {t.showBaseSizes}
       </label>
 
-      <SizeGridScroll toggleId={ALL_SIZES} gridId={GRID} />
+      <SizeGridScroll toggleId={ALL_SIZES} gridId={GRID} thumbId={THUMB} />
     </fieldset>
   );
 }
