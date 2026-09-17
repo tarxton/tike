@@ -125,6 +125,29 @@ test.describe('filters', () => {
     );
   });
 
+  test('the last page is as quick as the first', async ({ page, request }) => {
+    await page.goto('/patike');
+    const total = await resultCount(page);
+    const last = Math.ceil(total / 48);
+    test.skip(last < 20, `only ${last} pages - too few for the offset to cost anything`);
+
+    // Timed on the bare request, so it measures the server rather than image loading.
+    // Before the size and shop lists were built for the page alone, this took 14s: they
+    // were evaluated for every row on the way to the offset, so the cost grew with the
+    // page number, and the pager links the last page from every page.
+    const started = Date.now();
+    const response = await request.get(`/patike?strana=${last}`);
+    const elapsed = Date.now() - started;
+    expect(response.status()).toBe(200);
+    expect(elapsed, `page ${last} took ${elapsed}ms`).toBeLessThan(8_000);
+
+    await page.goto(`/patike?strana=${last}`);
+    expect(await cards(page).count()).toBeGreaterThan(0);
+    await expect(
+      page.getByText(new RegExp(`od ${total.toLocaleString('de-DE')}\\.`)),
+    ).toBeVisible();
+  });
+
   test('a page past the end says so instead of looking like an empty search', async ({ page }) => {
     await page.goto('/patike?strana=9999');
     await expect(page.getByText('Nema rezultata na toj stranici.')).toBeVisible();

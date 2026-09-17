@@ -453,6 +453,10 @@ const scoredTitle = sql`btrim(replace(' ' || regexp_replace(unaccent(lower(b.tit
  *
  * Equal on both, the result covering more shops wins. That is the whole point of the
  * site, and it costs the shopper nothing when the prices are identical anyway.
+ *
+ * Returns the sort keys without `order by`, because they are used inside a window —
+ * `row_number() over (order by …)` — to number the page before anything expensive is
+ * computed for it. See the `page` step in `searchOffers`.
  */
 function resultOrder(query: string | undefined, sort: SortKey | undefined) {
   const trimmed = query?.trim();
@@ -460,22 +464,22 @@ function resultOrder(query: string | undefined, sort: SortKey | undefined) {
   // pagination never reorders rows it has already shown.
   const tail = sql`g.min_price asc, g.shop_count desc, g.group_key asc`;
 
-  if (sort === 'najjeftinije') return sql`order by ${tail}`;
-  if (sort === 'najskuplje') return sql`order by g.min_price desc, g.group_key asc`;
+  if (sort === 'najjeftinije') return tail;
+  if (sort === 'najskuplje') return sql`g.min_price desc, g.group_key asc`;
   if (sort === 'abecedno') {
     // Collated so that Č and Ć sort where a BCS reader expects, not after Z.
-    return sql`order by unaccent(lower(b.title)) asc, ${tail}`;
+    return sql`unaccent(lower(b.title)) asc, ${tail}`;
   }
   if (sort === 'snizenje') {
     // Only 3.7% of the catalogue is discounted, so everything else ties at zero and the
     // tail decides — which is why the tail is cheapest-first rather than arbitrary.
-    return sql`order by g.best_discount desc, ${tail}`;
+    return sql`g.best_discount desc, ${tail}`;
   }
-  if (sort === 'najnovije') return sql`order by g.first_seen desc, ${tail}`;
+  if (sort === 'najnovije') return sql`g.first_seen desc, ${tail}`;
 
   // No explicit choice: be relevant when there is something to be relevant to.
-  if (!trimmed) return sql`order by g.first_seen desc, ${tail}`;
-  return sql`order by
+  if (!trimmed) return sql`g.first_seen desc, ${tail}`;
+  return sql`
       round(similarity(${scoredTitle}, regexp_replace(unaccent(lower(${trimmed})), '[^a-z0-9 ]', '', 'g'))::numeric, 1) desc,
       ${tail}`;
 }
@@ -642,6 +646,60 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
         (array_agg(id order by price_minor asc, id asc))[1] as best_offer_id
       from candidate
       group by group_key
+    ),
+    /*
+     * The page, chosen before anything expensive is built for it.
+     *
+     * The size list and the shop list below each read every candidate offer. They used to
+     * be subqueries in the final select, and Postgres evaluates a select list for every
+     * row it passes on the way to the offset, not only for the rows it returns — so page
+     * one cost 48 of each and the last page cost 6.240. Measured: 0,4s for page one, 5,7s
+     * for page 51, 14,4s for page 130, and page 130 is not obscure, it is the "last page"
+     * link the pager always shows.
+     *
+     * Numbering the rows with a window instead of sorting the final select keeps the order
+     * identical to what it was, and lets the result come back in that order after the
+     * lists are joined on. The total is counted here too, over every group, so it still
+     * does not depend on which page was asked for.
+     */
+    page as (
+      select
+        g.group_key, g.min_price, g.max_price, g.shop_count, g.best_offer_id,
+        count(*) over () as total,
+        row_number() over (order by ${resultOrder(query, sort)}) as position
+      from grouped g
+      join candidate b on b.id = g.best_offer_id
+      order by position
+      limit ${limit} offset ${offset}
+    ),
+    -- Sizes are the union across the group: a shoe is available in 44 if any shop in the
+    -- group has 44, which is the whole point of comparing shops. One pass over the page's
+    -- offers, not one per result.
+    page_sizes as (
+      select c.group_key, json_agg(distinct f.size_eu order by f.size_eu) as sizes
+      from page pg
+      join candidate c on c.group_key = pg.group_key
+      join offer_size f on f.offer_id = c.id and f.in_stock
+      group by c.group_key
+    ),
+    -- The shops behind the count, cheapest first, so a card can show whose prices these are
+    -- rather than only how many there are. Slug breaks a tie, so two shops at one price
+    -- come back in the same order every time rather than whichever the planner met first.
+    page_shops as (
+      select
+        x.group_key,
+        json_agg(
+          json_build_object('slug', x.slug, 'name', x.name, 'logoUrl', x.logo)
+          order by x.price, x.slug
+        ) as shops
+      from (
+        select c.group_key, c.shop_slug as slug, c.shop_name as name, c.shop_logo as logo,
+               min(c.price_minor) as price
+        from page pg
+        join candidate c on c.group_key = pg.group_key
+        group by 1, 2, 3, 4
+      ) x
+      group by x.group_key
     )
     select
       b.id            as "offerId",
@@ -661,54 +719,27 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
       coalesce(pb.name, b.raw_brand) as "brand",
       b.url           as "url",
       b.image_url     as "imageUrl",
-      g.min_price     as "priceMinor",
-      g.max_price     as "maxPriceMinor",
+      pg.min_price    as "priceMinor",
+      pg.max_price    as "maxPriceMinor",
       b.original_price_minor as "originalPriceMinor",
       b.currency::text as "currency",
-      g.shop_count    as "shopCount",
-      -- Sizes are the union across the group: a shoe is available in 44 if any shop
-      -- in the group has 44, which is the whole point of comparing shops.
-      -- json_agg, not array_agg: the HTTP driver hands back Postgres arrays as the
-      -- raw string "{40.00,41.00}", whereas JSON arrives as a real array.
-      coalesce(
-        (
-          select json_agg(distinct f.size_eu order by f.size_eu)
-          from offer_size f
-          join candidate c on c.id = f.offer_id
-          where c.group_key = g.group_key and f.in_stock
-        ),
-        '[]'::json
-      ) as "sizesEu",
-      -- The shops behind the count, cheapest first, so a card can show whose prices
-      -- these are rather than only how many there are.
-      coalesce(
-        (
-          select json_agg(x)
-          from (
-            select
-              c.shop_slug as "slug",
-              c.shop_name as "name",
-              c.shop_logo as "logoUrl",
-              min(c.price_minor) as p
-            from candidate c
-            where c.group_key = g.group_key
-            group by 1, 2, 3
-            order by p asc
-          ) x
-        ),
-        '[]'::json
-      ) as "shops",
+      pg.shop_count   as "shopCount",
+      -- json_agg, not array_agg: the HTTP driver hands back Postgres arrays as the raw
+      -- string "{40.00,41.00}", whereas JSON arrives as a real array.
+      coalesce(ps.sizes, '[]'::json) as "sizesEu",
+      coalesce(sh.shops, '[]'::json) as "shops",
       -- Total across every page, in the same round trip. A separate count query would
       -- double the latency and could disagree with the page under concurrent writes.
-      count(*) over() as "totalCount"
-    from grouped g
-    join candidate b on b.id = g.best_offer_id
+      pg.total        as "totalCount"
+    from page pg
+    join candidate b on b.id = pg.best_offer_id
     join shop s on s.id = b.shop_id
+    left join page_sizes ps on ps.group_key = pg.group_key
+    left join page_shops sh on sh.group_key = pg.group_key
     -- Only matched results have a product page to link to.
     left join product pr on pr.id = b.product_id
     left join brand pb on pb.id = pr.brand_id
-    ${resultOrder(query, sort)}
-    limit ${limit} offset ${offset}
+    order by pg.position
   `);
 
   const raw = rows.rows as Record<string, unknown>[];
