@@ -110,6 +110,68 @@ describe('parseMagento2', () => {
   });
 });
 
+/*
+ * A second Magento shop, onboarded as a config row.
+ *
+ * The adapter was written against Đak alone, so without these nothing would notice it had
+ * grown Đak-specific: a parser that happened to depend on one shop's theme would pass its
+ * own fixtures and quietly fail the next shop on the platform.
+ */
+describe('parseMagento2 across shops', () => {
+  const spotDir = join(import.meta.dirname, '../../fixtures/thespot');
+  const spot = (name: string) => readFileSync(join(spotDir, name), 'utf-8');
+  const BASE = 'https://www.thespot.ba';
+
+  it('reads a men’s listing from The Spot, third sizes and markdown included', () => {
+    const offer = parseMagento2(
+      spot('01-in-stock-men.html'),
+      `${BASE}/adidas-patike-vl-court-3-0-ftwwht-cblack-greone-za-muskarce-id6285`,
+    );
+    expect(offer.externalId).toBe('137802');
+    expect(offer.brand).toBe('ADIDAS');
+    expect(offer.gender).toBe('men');
+    expect(offer.sku).toBe('ID6285');
+    expect(offer.priceRaw).toBe('111.92');
+    expect(offer.originalPriceRaw).toBe('139.90');
+
+    const normalized = normalizeOffer(offer);
+    expect(normalized.sizes.map((s) => s.sizeEu).sort((a, b) => a - b)).toEqual([44, 44.67, 46.67]);
+  });
+
+  it('reads women’s and children’s audiences from the same attribute', () => {
+    const women = parseMagento2(
+      spot('03-in-stock-women.html'),
+      `${BASE}/adidas-patike-vl-court-za-zene-jr8669`,
+    );
+    expect(women.gender).toBe('women');
+
+    // "DJEVOJČICE" on the attribute, "ZA DEVOJČICE" in the title: both spellings on one
+    // page, which is the ekavian/ijekavian split the Đak tests already guard.
+    const kids = parseMagento2(
+      spot('04-in-stock-kids.html'),
+      `${BASE}/adidas-patike-vl-court-bold-j-ftwwht-cblack-gum3-djevojcice-jq8065`,
+    );
+    expect(kids.gender).toBe('kids');
+    expect(normalizeOffer(kids).sizes.map((s) => s.sizeEu)).toContain(35.33);
+  });
+
+  it('keeps a two-word brand and a code with letters after its digits', () => {
+    const offer = parseMagento2(
+      spot('05-in-stock-new-balance.html'),
+      `${BASE}/new-balance-patike-5030-za-muskarce-u50303l3`,
+    );
+    expect(offer.brand).toBe('NEW BALANCE');
+    expect(offer.sku).toBe('U50303L3');
+    expect(normalizeOffer(offer).model).toBe('5030');
+  });
+
+  it('treats a sold-out listing as unavailable, not as broken markup', () => {
+    const url = `${BASE}/zenske-patike-nike-air-max-270-fb2934-100`;
+    expect(() => parseMagento2(spot('02-sold-out.html'), url)).toThrow(UnavailableError);
+    expect(() => parseMagento2(spot('02-sold-out.html'), url)).not.toThrow(ParseError);
+  });
+});
+
 describe('extractSlugStyleCode', () => {
   it('reads codes in both shapes the shop uses', () => {
     expect(extractSlugStyleCode('https://x/y/puma-patike-karmen-398878-01')).toBe('398878-01');

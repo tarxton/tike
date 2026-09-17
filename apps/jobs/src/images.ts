@@ -41,6 +41,17 @@ async function main(): Promise<void> {
   const dryRun = args.includes('--dry-run');
   const shopArg = args.find((a) => a.startsWith('--shop='));
   const shopSlug = shopArg ? shopArg.split('=')[1] : null;
+  /*
+   * Only shops a GitHub runner can reach.
+   *
+   * Đak and The Spot sit behind a Cloudflare rule that blocks datacentre addresses, and
+   * their images come from the same host as their pages. Their crawls run on a machine
+   * outside CI, which fetches their images straight afterwards — but if that ever did not
+   * happen, this job would pick the URLs up from a runner, get the block page for every
+   * one, and record each as a failure. A recorded failure is never retried, so one missed
+   * local run would have left those cards without pictures for good.
+   */
+  const ciOnly = args.includes('--ci');
 
   let config;
   try {
@@ -98,6 +109,9 @@ async function main(): Promise<void> {
       crawlConfig: unknown;
     }[]) {
       const config = crawlConfigSchema.parse(s.crawlConfig ?? {});
+      // No fetcher, so the loop below skips these rows without touching the cache —
+      // unlike a missing fetcher found mid-run, which is a bug and is recorded as one.
+      if (ciOnly && !config.runsInCi) continue;
       const fetcher = new PoliteFetcher(s.baseUrl, s.minDelayMs, config.transport);
       await fetcher.init();
       fetchers.set(s.slug, fetcher);
@@ -116,10 +130,18 @@ async function main(): Promise<void> {
      * long the largest shop takes, about 88.
      */
     const byShop = new Map<string, typeof pending>();
+    let outsideCi = 0;
     for (const row of pending) {
+      if (!fetchers.has(row.shopSlug)) {
+        outsideCi += 1;
+        continue;
+      }
       const list = byShop.get(row.shopSlug) ?? [];
       list.push(row);
       byShop.set(row.shopSlug, list);
+    }
+    if (outsideCi > 0) {
+      console.log(`  ${outsideCi} left for the machine that crawls those shops (--ci)`);
     }
 
     const runShop = async (rows: typeof pending) => {
