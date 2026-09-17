@@ -797,23 +797,38 @@ export async function availableBrands(
     (sizesEu ?? []).some((s) => s < ADULT_MIN_SIZE) ||
     (genders ?? []).includes('kids');
   const rows = await db().execute(sql`
+    -- One chip per brand, not one per spelling of it.
+    --
+    -- Shops disagree about capitals: Đak and The Spot write NIKE, ADIDAS and PEPE JEANS
+    -- where the others write Nike, adidas and Pepe Jeans, and grouping on the raw string
+    -- put both in the filter — "NIKE 251" beside "Nike 1.970", two chips that select the
+    -- same offers because the filter itself has always been case-insensitive. Grouping
+    -- folds case and accents; the label is the least shouty spelling, which is also how
+    -- each brand writes its own name.
+    --
+    -- Chosen across the whole catalogue, not within the filtered results. Picking it from
+    -- the same rows the facet counts meant that filtering to a shop which writes in
+    -- capitals turned every chip into capitals — "PEPE JEANS", "REPLAY", "ON" — for brands
+    -- the rest of the site spells normally, and the chip changed its name depending on
+    -- which shop was ticked.
+    with label as (
+      select unaccent(lower(o.raw_brand)) as key,
+             (array_agg(o.raw_brand order by (o.raw_brand = upper(o.raw_brand)), o.raw_brand))[1]
+               as name
+      from offer o
+      join shop s on s.id = o.shop_id
+      where o.in_stock and s.active and o.raw_brand is not null
+      group by 1
+    )
     -- Counts groups, not offers, so a facet count matches the result count the header
     -- shows after the same click. Counting rows here would say "Nike 73" and then land
     -- on a page reporting 68.
     select
-      -- One chip per brand, not one per spelling of it.
-      --
-      -- Shops disagree about capitals: Đak writes NIKE, ADIDAS and PUMA where the other
-      -- four write Nike, adidas and Puma, and grouping on the raw string put both in the
-      -- filter — "NIKE 251" beside "Nike 1.970", two chips that select the same 2.221
-      -- offers because the filter itself has always been case-insensitive. Grouping folds
-      -- case and accents; the label is the least shouty spelling, which is also how each
-      -- brand writes its own name.
-      (array_agg(o.raw_brand order by (o.raw_brand = upper(o.raw_brand)), o.raw_brand))[1]
-        as "brand",
+      l.name as "brand",
       count(distinct coalesce('p' || o.product_id::text, 'o' || o.id::text))::int as "count"
     from offer o
     join shop s on s.id = o.shop_id
+    join label l on l.key = unaccent(lower(o.raw_brand))
     where o.in_stock and s.active and o.raw_brand is not null
       ${sizeFilter(sizesEu)}
       ${kidsFilter(wantsKids)}
@@ -822,7 +837,7 @@ export async function availableBrands(
       ${genderFilter(genders)}
       ${modelFilter(modelKey)}
       ${titleFilter(query)}
-    group by unaccent(lower(o.raw_brand))
+    group by l.name
     order by 2 desc, 1 asc
   `);
   return (rows.rows as Record<string, unknown>[]).map((r) => ({

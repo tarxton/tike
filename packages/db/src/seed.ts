@@ -107,7 +107,11 @@ const shops = [
     // the same `productBrand` / `productGender` script, and titles written the same way
     // as Đak's — "ADIDAS PATIKE COURT ZA MUŠKARCE". Crawled with the operator's permission.
     slug: 'thespot',
-    logoUrl: null,
+    // Their own mark, from their store header. That one is white type for a dark header, so
+    // on a white card only "THE" and the red dot showed: the wordmark is recoloured to
+    // near-black, the red left exactly as they drew it, and the whole set on a white box —
+    // a selected shop chip is dark, and a transparent dark mark vanished into it.
+    logoUrl: '/shops/thespot.png',
     name: 'The Spot',
     baseUrl: 'https://www.thespot.ba',
     platform: 'magento2' as const,
