@@ -71,6 +71,8 @@ export const t = {
   soldOut: 'Trenutno nema ni u jednoj prodavnici.',
   availableSizes: 'Dostupno u brojevima',
   priceNote: 'Cijene se povremeno ažuriraju i mogu se razlikovati u prodavnici.',
+  lastUpdated: 'Zadnji put ažurirano',
+  priceCheckedAt: 'Cijena provjerena',
 
   footerAbout: 'tike pretražuje ponudu BiH prodavnica. Ne prodajemo obuću.',
 } as const;
@@ -151,4 +153,43 @@ export function formatSize(size: number): string {
   if (frac === 33) return `${whole}⅓`;
   if (frac === 67) return `${whole}⅔`;
   return size.toString().replace('.', ',');
+}
+
+/** The shops' own time, whatever the server's clock says: Workers run in UTC. */
+const SHOP_TIME_ZONE = 'Europe/Sarajevo';
+
+/** "2026-09-18" for the day an instant falls on in BiH, for comparing days. */
+function localDay(at: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: SHOP_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(at);
+}
+
+/**
+ * When a price was checked, the way someone here would say it: "danas u 03:19",
+ * "jučer u 17:01", "16. 9. u 17:25".
+ *
+ * In BiH time, not the server's. The site runs on Workers in UTC, so a crawl at 01:30 in
+ * Sarajevo in summer happened at 23:30 the day before by the server's clock — printed
+ * naively it would read as "jučer" to someone who watched it run that morning.
+ *
+ * `now` is a parameter so the words can be tested; the page passes the request time.
+ */
+export function formatCheckedAt(checkedAt: Date, now: Date): string {
+  const time = new Intl.DateTimeFormat('hr-HR', {
+    timeZone: SHOP_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(checkedAt);
+
+  const day = localDay(checkedAt);
+  if (day === localDay(now)) return `danas u ${time}`;
+  if (day === localDay(new Date(now.getTime() - 24 * 60 * 60 * 1000))) return `jučer u ${time}`;
+
+  const [, month, date] = day.split('-').map(Number);
+  return `${date}. ${month}. u ${time}`;
 }
