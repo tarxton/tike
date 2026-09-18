@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { clippedCase, sizeCase, sizesForSlug } from './support/catalogue';
+import { clippedCase, nearOnlyCase, sizeCase, sizesForSlug } from './support/catalogue';
 import { cards, chipsOn, headerSizes, resultCount, sizeLabel } from './support/page-helpers';
 import { BASE_MAX_SIZE, BASE_MIN_SIZE } from '../src/lib/sizes';
 
@@ -28,11 +28,13 @@ test.describe('size filter', () => {
     const count = await list.count();
     expect(count).toBeGreaterThan(0);
 
-    const label = sizeLabel(size);
+    // The size itself, or a half or a third of it: some brands never make the plain
+    // number, and the search includes those shoes on purpose (outlined, not filled).
+    const labels = [size, size + 0.33, size + 0.5, size + 0.67].map(sizeLabel);
     const silent: string[] = [];
     for (let i = 0; i < count; i += 1) {
       const chips = await chipsOn(list.nth(i));
-      if (!chips.some((chip) => chip.trim() === label)) {
+      if (!chips.some((chip) => labels.includes(chip.trim()))) {
         silent.push((await list.nth(i).locator('h3').innerText()).trim());
       }
     }
@@ -80,8 +82,34 @@ test.describe('size filter', () => {
       expect(href, 'a card with no link').toBeTruthy();
       const slug = href!.split('?')[0]!.replace('/patika/', '');
       const sizes = await sizesForSlug(slug);
-      expect(sizes, `${slug} is on a page filtered to ${size}`).toContain(size);
+      expect(
+        sizes.some((s) => s >= size && s < size + 1),
+        `${slug} is on a page filtered to ${size} but stocks ${sizes.join(', ')}`,
+      ).toBe(true);
     }
+  });
+
+  test('a whole size brings its halves and thirds, outlined rather than filled', async ({
+    page,
+  }) => {
+    const near = await nearOnlyCase();
+    test.skip(near === null, 'no shoe stocks a third of a size without the size itself');
+
+    await page.goto(`/patike?model=${encodeURIComponent(near!.familyKey)}&velicina=${near!.size}`);
+    const card = cards(page).filter({ has: page.locator(`a[href*="${near!.slug}"]`) });
+    await expect(card).toHaveCount(1);
+
+    // The near size is there, and styled as not-quite-yours: no filled chip claims the
+    // plain number the shoe does not come in.
+    const chip = card.locator('ul li', { hasText: new RegExp(`^${sizeLabel(near!.nearSize)}$`) });
+    await expect(chip).toHaveCount(1);
+    // Asserted as what it is rather than what it is not: Tailwind reports colours in
+    // oklch, so "not the dark fill" would pass for a filled chip too.
+    const background = await chip.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(background).toMatch(/rgb\(255, 255, 255\)|oklch\(1 0 0\)/);
+    await expect(
+      card.locator('ul li', { hasText: new RegExp(`^${sizeLabel(near!.size)}$`) }),
+    ).toHaveCount(0);
   });
 
   test('a size nobody stocks says so instead of showing anything', async ({ page }) => {

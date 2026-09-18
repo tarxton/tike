@@ -66,6 +66,8 @@ let cache: {
   term?: Promise<string>;
   clipped?: Promise<ClippedCase | null>;
   kidsOnly?: Promise<{ key: string; model: string } | null>;
+  nearOnly?: Promise<{ slug: string; familyKey: string; size: number; nearSize: number } | null>;
+  exactVariation?: Promise<string | null>;
 } = { offers: {} };
 
 /** Only useful to a test that deliberately wants a second look at the catalogue. */
@@ -295,6 +297,69 @@ export function kidsOnlyFamily(): Promise<{ key: string; model: string } | null>
     return rows[0] ?? null;
   })();
   return cache.kidsOnly;
+}
+
+/**
+ * A shoe that stocks a third or a half of some whole size but never the size itself —
+ * 44⅔ without 44 — so a search for 44 includes it only through the near-size rule.
+ */
+export function nearOnlyCase(): Promise<{
+  slug: string;
+  familyKey: string;
+  size: number;
+  nearSize: number;
+} | null> {
+  cache.nearOnly ??= (async () => {
+    const rows = (await sql()`
+      with sizes as (
+        select p.id, p.slug,
+               btrim(regexp_replace(unaccent(lower(coalesce(b.name, '') || ' ' || p.model)),
+                 '[^a-z0-9]+', '-', 'g'), '-') as family,
+               f.size_eu::float8 as size
+        from product p
+        left join brand b on b.id = p.brand_id
+        join offer o on o.product_id = p.id and o.in_stock
+        join shop s on s.id = o.shop_id and s.active
+        join offer_size f on f.offer_id = o.id and f.in_stock
+        where p.model <> ''
+      )
+      select n.slug, n.family as "familyKey", floor(n.size)::float8 as size, n.size as "nearSize"
+      from sizes n
+      where n.size <> floor(n.size) and floor(n.size) >= ${ADULT_MIN_SIZE}
+        and not exists (select 1 from sizes x where x.id = n.id and x.size = floor(n.size))
+      order by n.slug, n.size
+      limit 1
+    `) as { slug: string; familyKey: string; size: number; nearSize: number }[];
+    return rows[0] ?? null;
+  })();
+  return cache.nearOnly;
+}
+
+/**
+ * A model name that exists on its own and as the start of longer ones — "Samba" beside
+ * "Samba OG" and "Samba XLG" — for checking that exact matches come first.
+ */
+export function exactAndVariationCase(): Promise<string | null> {
+  cache.exactVariation ??= (async () => {
+    const rows = (await sql()`
+      with m as (
+        select distinct lower(p.model) as model
+        from product p
+        join offer o on o.product_id = p.id and o.in_stock
+        join shop s on s.id = o.shop_id and s.active
+        where p.model ~ '^[A-Za-z]{4,}$'
+      )
+      select m.model,
+             (select count(distinct p2.id) from product p2
+               join offer o2 on o2.product_id = p2.id and o2.in_stock
+              where lower(p2.model) like m.model || ' %')::int as variations
+      from m
+      order by 2 desc, 1
+      limit 1
+    `) as { model: string; variations: number }[];
+    return rows[0] && rows[0].variations > 0 ? rows[0].model : null;
+  })();
+  return cache.exactVariation;
 }
 
 /** A slug a product has outgrown, which must still resolve. */

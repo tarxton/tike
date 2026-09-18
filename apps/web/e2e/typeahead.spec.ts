@@ -58,23 +58,53 @@ test.describe('model typeahead', () => {
     expect(await cards(page).count()).toBeGreaterThan(0);
   });
 
-  test('a model picked on the home page keeps the sizes ticked there', async ({ page }) => {
+  test('on the home page a picked model waits for "Pretraži", sizes and all', async ({ page }) => {
     const { size } = await sizeCase();
     await page.goto('/');
 
-    // The home page has never submitted the form, so the URL knows nothing about the
-    // sizes on screen: picking a model used to throw the ticked size away.
-    await page.locator(`label:has(input[name="velicina"][value="${size}"])`).click();
+    // Model first, size after: the order someone is likely to use, which a pick that
+    // jumped straight to the results made impossible.
     const term = await searchTerm();
     const options = (await suggestFor(page, term.slice(0, 4))).getByRole('option');
     await expect(options.first()).toBeVisible();
+    const name = (await options.first().locator('span').first().innerText())
+      .replace(/\s+/g, ' ')
+      .trim();
     await options.first().click();
+
+    await expect(page.getByRole('combobox', { name: 'Pretraži' })).toHaveValue(name);
+    await page.waitForTimeout(500);
+    expect(new URL(page.url()).pathname, 'picking a model left the home page').toBe('/');
+
+    await page.locator(`label:has(input[name="velicina"][value="${size}"])`).click();
+    await page.getByRole('button', { name: 'Pretraži' }).click();
 
     await page.waitForURL(/model=/);
     const url = new URL(page.url());
     expect(url.pathname).toBe('/patike');
     expect(url.searchParams.get('velicina')).toBe(String(size));
     expect(url.searchParams.get('model')).toBeTruthy();
+    // The chosen model, not its name as free text, which would match every variation.
+    expect(url.searchParams.get('q')).toBeNull();
+
+    // And the box on the results page still says which model this is.
+    await expect(page.getByRole('combobox', { name: 'Pretraži' })).toHaveValue(name);
+  });
+
+  test("a size ticked on a model's results keeps the model when searched", async ({ page }) => {
+    const { size } = await sizeCase();
+    const term = await searchTerm();
+    await page.goto('/patike');
+    const options = (await suggestFor(page, term.slice(0, 4))).getByRole('option');
+    await options.first().click();
+    await page.waitForURL(/model=/);
+    const model = new URL(page.url()).searchParams.get('model');
+
+    // The form used to carry only sizes and text, so this dropped the model entirely.
+    await page.locator(`label:has(input[name="velicina"][value="${size}"])`).click();
+    await page.getByRole('button', { name: 'Pretraži' }).click();
+    await page.waitForURL(new RegExp(`velicina=${size}`));
+    expect(new URL(page.url()).searchParams.get('model')).toBe(model);
   });
 
   test("a model that only exists as a child's shoe still shows it", async ({ page }) => {

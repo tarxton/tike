@@ -3,16 +3,9 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { productBySlug, productSlugRedirect, searchOffers, type ProductOffer } from '@tike/db';
-import {
-  formatCheckedAt,
-  formatPrice,
-  formatSize,
-  pluralShops,
-  seeAllColourways,
-  t,
-} from '@/lib/messages';
-import { parseSizes } from '@/lib/sizes';
-import { chipsToShow } from '@/lib/size-chips';
+import { formatCheckedAt, formatPrice, formatSize, pluralShops, t } from '@/lib/messages';
+import { parseSizes, sizeMatch } from '@/lib/sizes';
+import { chipsToShow, sizeChipClass } from '@/lib/size-chips';
 import { OfferCard } from '@/components/offer-card';
 import { ShopLogo } from '@/components/shop-logo';
 
@@ -282,15 +275,16 @@ export default async function ProductPage({
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-sm font-medium text-neutral-700">{t.otherColourways}</h2>
             {/*
-             * Only worth a link when there is more behind the shelf than on it. The count
-             * is the honest one — every colourway matching the same size filter.
+             * Only worth a link when there is more behind the shelf than on it. No count in
+             * the label: the shelf counts colourways in the visitor's sizes, while the link
+             * opens every colour, so any number here understated what it led to.
              */}
             {related.total > related.items.length ? (
               <Link
                 href={`/patike?model=${encodeURIComponent(product.familyKey)}`}
                 className="text-sm text-neutral-600 underline underline-offset-4 hover:text-neutral-900"
               >
-                {seeAllColourways(related.total)}
+                {t.seeAllColourways}
               </Link>
             ) : null}
           </div>
@@ -333,6 +327,8 @@ function ShopRow({
   const checkedAt = new Date(offer.checkedAt);
   const stale = now.getTime() - checkedAt.getTime() > STALE_AFTER_MS;
   const hasYourSize = selected.length > 0 && selected.some((s) => offer.sizesEu.includes(s));
+  // Only a half or a third of the size picked — worth saying, and worth saying differently.
+  const hasNearSize = !hasYourSize && offer.sizesEu.some((s) => sizeMatch(s, selected) === 'near');
   // The badge above already says whether this shop has your size; the chips are where
   // someone checks it, so the one they are checking for must be among them.
   const shown = chipsToShow(offer.sizesEu, selected, ROW_CHIPS);
@@ -376,10 +372,14 @@ function ShopRow({
             <span
               className={[
                 'rounded px-1.5 py-0.5 text-[11px] font-semibold',
-                hasYourSize ? 'bg-green-100 text-green-800' : 'bg-neutral-100 text-neutral-500',
+                hasYourSize
+                  ? 'bg-green-100 text-green-800'
+                  : hasNearSize
+                    ? 'bg-white text-neutral-800 ring-1 ring-neutral-400 ring-inset'
+                    : 'bg-neutral-100 text-neutral-500',
               ].join(' ')}
             >
-              {hasYourSize ? t.yourSize : t.noSizeHere}
+              {hasYourSize ? t.yourSize : hasNearSize ? t.nearSize : t.noSizeHere}
             </span>
           ) : null}
         </div>
@@ -424,9 +424,7 @@ function ShopRow({
             key={s}
             className={[
               'rounded px-1.5 py-0.5 text-[11px] tabular-nums',
-              selected.includes(s)
-                ? 'bg-neutral-900 text-white'
-                : 'bg-neutral-100 text-neutral-700',
+              sizeChipClass(s, selected),
             ].join(' ')}
           >
             {formatSize(s)}
