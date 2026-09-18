@@ -116,6 +116,22 @@ test.describe('product page', () => {
       .toBeGreaterThan(before - 400);
   });
 
+  test('says when the prices were last read', async ({ page }) => {
+    const product = await productCase();
+    test.skip(product === null, 'no multi-shop product available');
+    await page.goto(`/patika/${product!.slug}`);
+
+    // Prices refresh on a crawl, not live, so the page has to say how old they are.
+    const notice = page.getByText(/^Zadnji put ažurirano /);
+    await expect(notice).toBeVisible();
+    await expect(notice).toHaveText(
+      /(danas|jučer) u \d{2}:\d{2}|\d{1,2}\. \d{1,2}\. u \d{2}:\d{2}/,
+    );
+    // Machine-readable too, for anything that reads the page rather than looks at it.
+    const iso = await notice.locator('time').getAttribute('datetime');
+    expect(Number.isNaN(Date.parse(iso ?? ''))).toBe(false);
+  });
+
   test('an unknown slug is a 404', async ({ page }) => {
     const response = await page.goto('/patika/ova-patika-ne-postoji-12345');
     expect(response?.status()).toBe(404);

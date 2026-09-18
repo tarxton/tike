@@ -880,6 +880,14 @@ export interface ProductOffer {
   currency: string;
   /** In-stock EU sizes at this shop, ascending. */
   sizesEu: number[];
+  /**
+   * When the crawler last read this shop's page for this shoe, as an ISO timestamp.
+   *
+   * Per offer rather than per product, because shops are crawled at different times — the
+   * nightly ones before dawn, the two crawled from a desk in the evening — and a listing a
+   * crawl could not confirm keeps its last reading until the staleness rule retires it.
+   */
+  checkedAt: string;
 }
 
 export interface ProductDetail {
@@ -955,6 +963,7 @@ export async function productBySlug(slug: string): Promise<ProductDetail | null>
       o.price_minor          as "priceMinor",
       o.original_price_minor as "originalPriceMinor",
       o.currency::text as "currency",
+      o.last_seen_at  as "checkedAt",
       coalesce(
         (
           select json_agg(f.size_eu order by f.size_eu)
@@ -989,6 +998,7 @@ export async function productBySlug(slug: string): Promise<ProductDetail | null>
         : null,
       currency: String(r.currency),
       sizesEu: Array.isArray(r.sizesEu) ? r.sizesEu.map(Number) : [],
+      checkedAt: new Date(r.checkedAt as string | Date).toISOString(),
     };
   });
 

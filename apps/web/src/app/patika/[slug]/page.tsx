@@ -3,7 +3,14 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { productBySlug, productSlugRedirect, searchOffers, type ProductOffer } from '@tike/db';
-import { formatPrice, formatSize, pluralShops, seeAllColourways, t } from '@/lib/messages';
+import {
+  formatCheckedAt,
+  formatPrice,
+  formatSize,
+  pluralShops,
+  seeAllColourways,
+  t,
+} from '@/lib/messages';
 import { parseSizes } from '@/lib/sizes';
 import { chipsToShow } from '@/lib/size-chips';
 import { OfferCard } from '@/components/offer-card';
@@ -14,6 +21,16 @@ const RELATED_LIMIT = 3;
 
 /** How many size chips a shop row shows before the rest become "+N". */
 const ROW_CHIPS = 14;
+
+/**
+ * How old a shop's reading can get before its row says so on its own.
+ *
+ * A day and a bit, not twelve hours: the nightly shops are read before dawn and the two
+ * crawled from a desk in the evening, so rows on one page are routinely fifteen hours apart
+ * without anything having gone wrong. Past this, a crawl has been missed — the page could not
+ * be read, or said the shoe had sold out — and the price is older than the page implies.
+ */
+const STALE_AFTER_MS = 26 * 60 * 60 * 1000;
 
 export const dynamic = 'force-dynamic';
 
@@ -124,6 +141,13 @@ export default async function ProductPage({
   const dearest = product.offers[product.offers.length - 1];
   const spread = cheapest && dearest ? dearest.priceMinor - cheapest.priceMinor : 0;
 
+  // Rendered per request (the page is dynamic), so "danas" is today for whoever is reading.
+  const now = new Date();
+  const lastChecked = product.offers.reduce<Date | null>((latest, offer) => {
+    const at = new Date(offer.checkedAt);
+    return latest === null || at > latest ? at : latest;
+  }, null);
+
   return (
     <main className="mx-auto max-w-4xl px-5 py-8">
       <header className="mb-6 flex items-center gap-2">
@@ -215,7 +239,24 @@ export default async function ProductPage({
 
       {product.offers.length > 0 ? (
         <section className="mt-10">
-          <h2 className="mb-3 text-sm font-medium text-neutral-700">{t.atShops}</h2>
+          {/*
+           * When the prices below were read, said where the prices are.
+           *
+           * The most recent reading across the shops, because that is when this page was
+           * last brought up to date. A shop whose own reading is much older says so on its
+           * row, rather than dragging the whole page's date back for one late listing.
+           */}
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 className="text-sm font-medium text-neutral-700">{t.atShops}</h2>
+            {lastChecked ? (
+              <p className="text-xs text-neutral-500">
+                {t.lastUpdated}{' '}
+                <time dateTime={lastChecked.toISOString()}>
+                  {formatCheckedAt(lastChecked, now)}
+                </time>
+              </p>
+            ) : null}
+          </div>
           {/*
            * Named for the e2e suite. The list is where "cheapest first" either holds or
            * does not, and locating it through the surrounding markup meant a test that
@@ -224,7 +265,12 @@ export default async function ProductPage({
           <ul data-testid="shop-rows" className="space-y-3">
             {product.offers.map((offer, i) => (
               <li key={offer.offerId}>
-                <ShopRow offer={offer} selected={selected} cheapest={i === 0 && spread > 0} />
+                <ShopRow
+                  offer={offer}
+                  selected={selected}
+                  cheapest={i === 0 && spread > 0}
+                  now={now}
+                />
               </li>
             ))}
           </ul>
@@ -276,12 +322,16 @@ function ShopRow({
   offer,
   selected,
   cheapest,
+  now,
 }: {
   offer: ProductOffer;
   selected: number[];
   /** Only when some other shop is dearer — "cheapest" of two identical prices says nothing. */
   cheapest: boolean;
+  now: Date;
 }) {
+  const checkedAt = new Date(offer.checkedAt);
+  const stale = now.getTime() - checkedAt.getTime() > STALE_AFTER_MS;
   const hasYourSize = selected.length > 0 && selected.some((s) => offer.sizesEu.includes(s));
   // The badge above already says whether this shop has your size; the chips are where
   // someone checks it, so the one they are checking for must be among them.
@@ -357,6 +407,13 @@ function ShopRow({
           <span className="line-through">
             {formatPrice(offer.originalPriceMinor, offer.currency)}
           </span>
+        </p>
+      ) : null}
+
+      {stale ? (
+        <p className="mt-1 text-xs text-amber-700">
+          {t.priceCheckedAt}{' '}
+          <time dateTime={checkedAt.toISOString()}>{formatCheckedAt(checkedAt, now)}</time>
         </p>
       ) : null}
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatCheckedAt,
   formatCount,
   formatPrice,
   formatSize,
@@ -81,5 +82,33 @@ describe('formatCount', () => {
     // 1.207, not 1,207 — the comma is the decimal separator here.
     expect(formatCount(1207)).toBe('1.207');
     expect(formatCount(48)).toBe('48');
+  });
+});
+
+describe('formatCheckedAt', () => {
+  // 18 September 2026, 18:45 in Sarajevo (CEST, UTC+2).
+  const now = new Date('2026-09-18T16:45:00Z');
+
+  it('says "danas" for earlier the same day, in BiH time', () => {
+    expect(formatCheckedAt(new Date('2026-09-18T01:19:00Z'), now)).toBe('danas u 03:19');
+  });
+
+  it('says "jučer" for the day before', () => {
+    expect(formatCheckedAt(new Date('2026-09-17T15:01:00Z'), now)).toBe('jučer u 17:01');
+  });
+
+  it('gives the date for anything older', () => {
+    expect(formatCheckedAt(new Date('2026-09-16T15:25:00Z'), now)).toBe('16. 9. u 17:25');
+  });
+
+  it('uses the shops’ day, not the server’s UTC one', () => {
+    // 23:30 UTC on the 17th is 01:30 on the 18th in Sarajevo: a crawl that ran this
+    // morning must not read as yesterday.
+    expect(formatCheckedAt(new Date('2026-09-17T23:30:00Z'), now)).toBe('danas u 01:30');
+  });
+
+  it('follows the clock change, one hour ahead in winter', () => {
+    const winter = new Date('2026-12-10T12:00:00Z');
+    expect(formatCheckedAt(new Date('2026-12-10T06:05:00Z'), winter)).toBe('danas u 07:05');
   });
 });
