@@ -44,3 +44,19 @@ export function parseSizes(raw: string | null | undefined): number[] {
     ),
   ].sort((a, b) => a - b);
 }
+
+/**
+ * How a size in stock relates to what the visitor picked.
+ *
+ * `exact` is the size itself. `near` is a half or a third of a whole size they picked —
+ * 44½ or 44⅔ for 44 — which the search includes because some brands never make the plain
+ * number, and which the page shows differently so it is never mistaken for the exact one.
+ * A half or a third picked on purpose matches only itself.
+ */
+export type SizeMatch = 'exact' | 'near' | null;
+
+export function sizeMatch(size: number, selected: number[]): SizeMatch {
+  if (selected.includes(size)) return 'exact';
+  if (selected.some((s) => Number.isInteger(s) && size > s && size < s + 1)) return 'near';
+  return null;
+}

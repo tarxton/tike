@@ -1,3 +1,5 @@
+import { sizeMatch } from './sizes';
+
 /**
  * Which size chips a card shows, when it cannot show them all.
  *
@@ -22,7 +24,23 @@
 export function chipsToShow(available: number[], selected: number[], room: number): number[] {
   if (available.length <= room) return available;
 
-  const keep = selected.filter((s) => available.includes(s)).slice(0, room);
+  // Near sizes too: a card shown because it stocks 44⅔ for someone who picked 44 has to
+  // show the 44⅔, or it is on the page for no visible reason.
+  const keep = available.filter((s) => sizeMatch(s, selected) !== null).slice(0, room);
   const rest = available.filter((s) => !keep.includes(s)).slice(0, room - keep.length);
   return [...keep, ...rest].sort((a, b) => a - b);
+}
+
+/**
+ * A size chip's colours, by how that size relates to what the visitor picked.
+ *
+ * Filled for the size itself, outlined for a half or a third of a whole size they picked —
+ * on offer and shown because of their pick, but not the number they asked for, and it must
+ * not look as though it were. Plain for everything else.
+ */
+export function sizeChipClass(size: number, selected: number[]): string {
+  const match = sizeMatch(size, selected);
+  if (match === 'exact') return 'bg-neutral-900 text-white';
+  if (match === 'near') return 'bg-white text-neutral-900 ring-1 ring-neutral-900 ring-inset';
+  return 'bg-neutral-100 text-neutral-700';
 }

@@ -23,12 +23,17 @@ import { parseSizes } from './sizes';
 export async function applyFilters(formData: FormData): Promise<void> {
   const sizes = parseSizes(formData.getAll('velicina').join(','));
   const query = String(formData.get('q') ?? '').trim();
+  // A chosen model outranks the text: the box then holds the model's name, which as a free
+  // search would match every variation of it rather than the one model picked. Without
+  // this, ticking a size on a model's results and pressing "Pretraži" dropped the model.
+  const model = String(formData.get('model') ?? '').trim();
   const brand = String(formData.get('brend') ?? '').trim();
   const showKids = formData.get('djecije') === '1';
 
   const params = new URLSearchParams();
   if (sizes.length > 0) params.set('velicina', sizes.join(','));
-  if (query) params.set('q', query);
+  if (model) params.set('model', model);
+  else if (query) params.set('q', query);
   if (brand) params.set('brend', brand);
   if (showKids) params.set('djecije', '1');
 

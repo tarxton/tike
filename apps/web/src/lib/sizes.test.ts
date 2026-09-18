@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSizes } from './sizes';
+import { parseSizes, sizeMatch } from './sizes';
 
 describe('parseSizes', () => {
   it('parses a comma list, sorted and de-duplicated', () => {
@@ -15,5 +15,27 @@ describe('parseSizes', () => {
     expect(parseSizes('abc,0,999,44')).toEqual([44]);
     expect(parseSizes('')).toEqual([]);
     expect(parseSizes(undefined)).toEqual([]);
+  });
+});
+
+describe('sizeMatch', () => {
+  it('is exact for the size itself', () => {
+    expect(sizeMatch(44, [44])).toBe('exact');
+    expect(sizeMatch(44.5, [44.5])).toBe('exact');
+  });
+
+  it('counts halves and thirds of a picked whole size as near', () => {
+    expect(sizeMatch(44.33, [44])).toBe('near');
+    expect(sizeMatch(44.5, [44])).toBe('near');
+    expect(sizeMatch(44.67, [44])).toBe('near');
+  });
+
+  it('does not reach into the next size, or below', () => {
+    expect(sizeMatch(45, [44])).toBeNull();
+    expect(sizeMatch(43.67, [44])).toBeNull();
+  });
+
+  it('keeps a half picked on purpose to itself', () => {
+    expect(sizeMatch(44.67, [44.5])).toBeNull();
   });
 });

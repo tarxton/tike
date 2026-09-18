@@ -418,14 +418,26 @@ function fuzzyTitleFilter(query: string | undefined) {
 }
 
 /**
- * The representative title with the category word stripped, for scoring only.
+ * What a result is called, for scoring only: the product's brand and model where matching
+ * has named it, the shop's own title where it has not.
  *
- * Buzz prefixes "Patike" to every title and Sport Vision does not, so scoring the raw
- * title ranks Buzz's whole catalogue below Sport Vision's on any query — a systematic
- * bias with nothing to do with relevance. Space-padded `replace` rather than a regex
- * word boundary, which Postgres would not honour here.
+ * It used to be the cheapest shop's title, and that was the wrong thing to score. Shops
+ * write the same shoe very differently — Đak's "ADIDAS PATIKE SAMBA ZA MUŠKARCE" against
+ * Buzz's "adidas Samba" — so a plain Samba that happened to be cheapest at Đak scored as a
+ * worse match for "samba" than a cleanly titled Samba OG. The results read Samba ×13, then
+ * the variations, then more plain Sambas from position 26. The canonical name is the same
+ * string whichever shop is cheapest.
+ *
+ * The category word is still stripped from the fallback: Buzz prefixes "Patike" to every
+ * title, which would otherwise rank its unmatched listings below everyone else's.
  */
-const scoredTitle = sql`btrim(replace(' ' || regexp_replace(unaccent(lower(b.title)), '[^a-z0-9 ]', '', 'g') || ' ', ' patike ', ' '))`;
+const scoredName = sql`btrim(replace(' ' || regexp_replace(unaccent(lower(
+  coalesce(nullif(btrim(coalesce(pb.name, '') || ' ' || coalesce(pr.model, '')), ''), b.title)
+)), '[^a-z0-9 ]', '', 'g') || ' ', ' patike ', ' '))`;
+
+/** The same, with every separator gone, for an exact comparison that ignores spacing. */
+const exactModel = sql`regexp_replace(unaccent(lower(coalesce(pr.model, ''))), '[^a-z0-9]', '', 'g')`;
+const exactBrandModel = sql`regexp_replace(unaccent(lower(coalesce(pb.name, '') || coalesce(pr.model, ''))), '[^a-z0-9]', '', 'g')`;
 
 /**
  * Result order.
@@ -455,8 +467,10 @@ function resultOrder(query: string | undefined, sort: SortKey | undefined) {
   if (sort === 'najjeftinije') return tail;
   if (sort === 'najskuplje') return sql`g.min_price desc, g.group_key asc`;
   if (sort === 'abecedno') {
-    // Collated so that Č and Ć sort where a BCS reader expects, not after Z.
-    return sql`unaccent(lower(b.title)) asc, ${tail}`;
+    // By the name the card shows, not the cheapest shop's title: sorting on "ADIDAS
+    // PATIKE…" put a card reading "Samba" among the A's. Unaccented, so Č and Ć sort
+    // where a BCS reader expects rather than after Z.
+    return sql`unaccent(lower(coalesce(pr.model, b.title))) asc, ${tail}`;
   }
   if (sort === 'snizenje') {
     // Only 3.7% of the catalogue is discounted, so everything else ties at zero and the
@@ -467,8 +481,19 @@ function resultOrder(query: string | undefined, sort: SortKey | undefined) {
 
   // No explicit choice: be relevant when there is something to be relevant to.
   if (!trimmed) return sql`g.first_seen desc, ${tail}`;
+  /*
+   * Exact matches first, then everything else by closeness.
+   *
+   * "samba" should list the shoes called Samba before Samba OG, XLG and LT — the model the
+   * shopper typed, and then its variations — and an exact name is a different kind of
+   * match from a close one, not just a slightly better score. Compared with separators
+   * removed and against both the model and brand + model, so "samba", "adidas samba" and
+   * "Samba" all land in the first tier.
+   */
+  const folded = sql`regexp_replace(unaccent(lower(${trimmed})), '[^a-z0-9]', '', 'g')`;
   return sql`
-      round(similarity(${scoredTitle}, regexp_replace(unaccent(lower(${trimmed})), '[^a-z0-9 ]', '', 'g'))::numeric, 1) desc,
+      case when ${exactModel} = ${folded} or ${exactBrandModel} = ${folded} then 0 else 1 end,
+      round(similarity(${scoredName}, regexp_replace(unaccent(lower(${trimmed})), '[^a-z0-9 ]', '', 'g'))::numeric, 1) desc,
       ${tail}`;
 }
 
@@ -535,16 +560,30 @@ function genderFilter(genders: string[] | undefined) {
   return sql`and (o.gender is null or o.gender::text in (${list}))`;
 }
 
-/** `size_eu in (45, 46)`, or nothing when no sizes are selected. */
+/** Offers stocking any selected size (a whole size with its halves and thirds), or nothing. */
 function sizeFilter(sizesEu: number[] | undefined) {
   if (!sizesEu || sizesEu.length === 0) return sql``;
-  const list = sql.join(
-    sizesEu.map((s) => sql`${s}`),
-    sql`, `,
+  /*
+   * A whole size brings its halves and thirds with it; a half or a third means itself.
+   *
+   * Someone who picks 44 wears a 44, but adidas sizes in thirds and plenty of shoes come in
+   * 44⅔ and never in a plain 44 — the size that fits a 44 foot in that brand. Matching only
+   * 44 hid those shoes entirely, so a search for someone's size quietly missed the pair
+   * they would have bought. The card marks such a size differently from an exact one, so
+   * nothing claims to be what it is not. Picking 44½ itself is a deliberate choice and
+   * stays exact.
+   */
+  const clauses = sql.join(
+    sizesEu.map((s) =>
+      Number.isInteger(s)
+        ? sql`(f.size_eu >= ${s} and f.size_eu < ${s + 1})`
+        : sql`f.size_eu = ${s}`,
+    ),
+    sql` or `,
   );
   return sql`and exists (
     select 1 from offer_size f
-    where f.offer_id = o.id and f.in_stock and f.size_eu in (${list})
+    where f.offer_id = o.id and f.in_stock and (${clauses})
   )`;
 }
 
@@ -657,6 +696,9 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
         row_number() over (order by ${resultOrder(query, sort)}) as position
       from grouped g
       join candidate b on b.id = g.best_offer_id
+      -- The product's own name, for ordering by relevance. See scoredName.
+      left join product pr on pr.id = b.product_id
+      left join brand pb on pb.id = pr.brand_id
       order by position
       limit ${limit} offset ${offset}
     ),

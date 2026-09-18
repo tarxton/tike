@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { SearchResult } from '@tike/db';
 import { ShopLogo } from './shop-logo';
 import { formatPrice, formatSize, pluralShops, t } from '@/lib/messages';
-import { chipsToShow } from '@/lib/size-chips';
+import { chipsToShow, sizeChipClass } from '@/lib/size-chips';
 
 /**
  * One result: either a shoe several shops carry, or a single unmatched listing.
@@ -220,7 +220,7 @@ export function OfferCard({ offer, sizes = [] }: { offer: SearchResult; sizes?: 
               key={s}
               className={[
                 'rounded px-1.5 py-0.5 text-[11px] tabular-nums',
-                sizes.includes(s) ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-700',
+                sizeChipClass(s, sizes),
               ].join(' ')}
             >
               {formatSize(s)}

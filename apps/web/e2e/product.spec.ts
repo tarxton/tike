@@ -57,8 +57,10 @@ test.describe('product page', () => {
       // Every row states one or the other. The cheapest shop having sold out of your
       // size is the single most useful thing this page can say, and silence on it is
       // indistinguishable from "yes".
-      expect(text, `row ${i} says nothing about the size`).toMatch(/tvoj broj/);
-      const claims = !text.includes('nema tvoj broj');
+      expect(text, `row ${i} says nothing about the size`).toMatch(/tvoj broj|sličan broj/);
+      // "sličan broj" is a half or a third of the size, not the size: only "tvoj broj" on
+      // its own claims the number itself.
+      const claims = !text.includes('nema tvoj broj') && !text.includes('sličan broj');
 
       // Chips are that shop's own sizes, truncated at fourteen - so they are only
       // evidence when nothing was truncated.
@@ -130,6 +132,14 @@ test.describe('product page', () => {
     // Machine-readable too, for anything that reads the page rather than looks at it.
     const iso = await notice.locator('time').getAttribute('datetime');
     expect(Number.isNaN(Date.parse(iso ?? ''))).toBe(false);
+  });
+
+  test('the colourway link does not promise a count it cannot keep', async ({ page }) => {
+    const product = await productCase();
+    test.skip(product === null, 'no multi-shop product available');
+    await page.goto(`/patika/${product!.slug}`);
+    // Either no link (nothing more behind the shelf) or exactly this text, never a number.
+    await expect(page.getByText(/Prikaži (sve|svih) \d+ boj/)).toHaveCount(0);
   });
 
   test('an unknown slug is a 404', async ({ page }) => {

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { searchTerm, sizeCase } from './support/catalogue';
+import { exactAndVariationCase, searchTerm, sizeCase } from './support/catalogue';
 import { cards, parsePrice, resultCount } from './support/page-helpers';
 
 /**
@@ -123,6 +123,24 @@ test.describe('filters', () => {
     expect((await cards(page).first().locator('h3').innerText()).trim()).not.toBe(
       firstTitle.trim(),
     );
+  });
+
+  test('a search lists the exact model before its variations', async ({ page }) => {
+    const model = await exactAndVariationCase();
+    test.skip(model === null, 'no model name exists both alone and as a prefix');
+
+    await page.goto(`/patike?q=${encodeURIComponent(model!)}`);
+    const titles = (await cards(page).locator('h3').allInnerTexts()).map((t) =>
+      t.trim().toLowerCase(),
+    );
+    expect(titles.length).toBeGreaterThan(1);
+
+    // "samba" should read Samba, Samba, Samba… then Samba OG, XLG, LT — not a plain Samba
+    // turning up again after the variations, which is what scoring shop titles produced.
+    const firstVariation = titles.findIndex((t) => t !== model);
+    const lastExact = titles.lastIndexOf(model!);
+    test.skip(firstVariation === -1, 'only exact matches on the first page');
+    expect(lastExact, `titles: ${titles.join(' | ')}`).toBeLessThan(firstVariation);
   });
 
   test('the last page is as quick as the first', async ({ page, request }) => {

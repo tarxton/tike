@@ -24,6 +24,8 @@ export function Filters({
   selected,
   showKids = false,
   query,
+  model,
+  applyModelOnPick = false,
   brands = [],
   compact = false,
   returnTo = '/patike',
@@ -33,6 +35,10 @@ export function Filters({
   /** A URL that asked for children's shoes opens the picker on every size. */
   showKids?: boolean;
   query?: string;
+  /** The model the results are filtered to, so the box can say so and the form keeps it. */
+  model?: { key: string; label: string };
+  /** See ModelSearch: the results page applies a picked model at once, the home page waits. */
+  applyModelOnPick?: boolean;
   brands?: string[];
   /** Results page: tighter spacing, since the grid is above the fold. */
   compact?: boolean;
@@ -44,7 +50,17 @@ export function Filters({
       {showKids ? <input type="hidden" name="djecije" value="1" /> : null}
       {brands.length > 0 ? <input type="hidden" name="brend" value={brands.join(',')} /> : null}
 
-      <ModelSearch defaultValue={query} />
+      {/*
+       * Keyed on what it was built from: its text is state, and a client navigation to
+       * different results would otherwise keep the previous search in the box — and, worse,
+       * the previous model in the form.
+       */}
+      <ModelSearch
+        key={`${query ?? ''}|${model?.key ?? ''}`}
+        defaultValue={query}
+        model={model}
+        applyOnPick={applyModelOnPick}
+      />
 
       <SizePicker sizes={sizes} selected={selected} openAll={showKids} />
 
@@ -56,7 +72,7 @@ export function Filters({
           {t.search}
         </button>
 
-        {selected.length > 0 || query ? (
+        {selected.length > 0 || query || model ? (
           // A plain link now. It had to be a server action while a cookie held the
           // sizes, because clearing only the URL left the cookie to put them straight
           // back and the button looked broken. With no cookie, the URL is the state.

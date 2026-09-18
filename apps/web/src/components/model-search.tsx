@@ -23,7 +23,8 @@ const MIN_QUERY = 2;
  *
  * Suggestions are model *families* rather than products, because a product is one
  * colourway — listing those would put "AIR FORCE 1 '07" in the dropdown thirty times.
- * Every row goes to results filtered to that model, carrying the ticked sizes with it.
+ * Every row means results filtered to that model, carrying the ticked sizes with it — at
+ * once on the results page, on "Pretraži" on the home page (see `applyOnPick`).
  *
  * A family holding one colourway used to go straight to that product's page. It read as a
  * shortcut and behaved as a trap: picking "Air Jordan 1" landed on a child's Air Jordan 1,
@@ -31,10 +32,35 @@ const MIN_QUERY = 2;
  * way and no sign of what had been narrowed. One row now means one destination, whether it
  * holds one colourway or thirty.
  */
-export function ModelSearch({ defaultValue }: { defaultValue?: string }) {
+export function ModelSearch({
+  defaultValue,
+  model,
+  applyOnPick = false,
+}: {
+  defaultValue?: string;
+  /** The model already chosen, when arriving at results filtered to one. */
+  model?: { key: string; label: string };
+  /**
+   * Whether picking a row runs the search straight away.
+   *
+   * On the results page it does: the grid is right there and changes under the choice. On
+   * the home page it does not — someone often names the shoe first and picks a size after,
+   * and a pick that jumped to the results took the size grid away before it could be used.
+   * There the pick only fills the form, and "Pretraži" runs it like everything else.
+   */
+  applyOnPick?: boolean;
+}) {
   const router = useRouter();
   const listId = useId();
-  const [value, setValue] = useState(defaultValue ?? '');
+  const [value, setValue] = useState(model?.label ?? defaultValue ?? '');
+  /*
+   * The chosen model, travelling with the form as a hidden field.
+   *
+   * The box shows the model's name, but the name is not the query: "adidas Samba" typed
+   * as text matches every Samba variation, while the chosen family is exactly one model.
+   * Cleared the moment the text is edited, because then the box says something else.
+   */
+  const [modelKey, setModelKey] = useState<string | null>(model?.key ?? null);
   const [items, setItems] = useState<ModelSuggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -176,6 +202,8 @@ export function ModelSearch({ defaultValue }: { defaultValue?: string }) {
      * shoe had been selected, or that anything had been selected at all.
      */
     setValue([s.brand, s.model].filter(Boolean).join(' '));
+    setModelKey(s.key);
+    if (!applyOnPick) return;
     const href = hrefFor(s);
     router.push(href);
     scrollToResults(href);
@@ -194,7 +222,10 @@ export function ModelSearch({ defaultValue }: { defaultValue?: string }) {
     if (e.key === 'Escape') {
       e.preventDefault();
       if (showList) setOpen(false);
-      else setValue('');
+      else {
+        setValue('');
+        setModelKey(null);
+      }
       return;
     }
     if (!showList) return;
@@ -217,6 +248,7 @@ export function ModelSearch({ defaultValue }: { defaultValue?: string }) {
 
   return (
     <div ref={boxRef} className="relative w-full max-w-xl">
+      {modelKey ? <input type="hidden" name="model" value={modelKey} /> : null}
       <input
         type="search"
         name="q"
@@ -224,6 +256,7 @@ export function ModelSearch({ defaultValue }: { defaultValue?: string }) {
         onChange={(e) => {
           typed.current = true;
           setValue(e.target.value);
+          setModelKey(null);
         }}
         onFocus={() => items.length > 0 && setOpen(true)}
         onKeyDown={onKeyDown}

@@ -242,6 +242,15 @@ export default async function Results({
           selected={selected}
           showKids={showKids}
           query={query}
+          model={
+            activeModel && modelKey
+              ? {
+                  key: modelKey,
+                  label: [activeModel.brand, activeModel.model].filter(Boolean).join(' '),
+                }
+              : undefined
+          }
+          applyModelOnPick
           brands={brands}
           compact
         />
