@@ -451,3 +451,15 @@ export async function deleteClicks(ids: number[]): Promise<void> {
   if (ids.length === 0) return;
   await sql()`delete from click where id = any(${ids}::int[])`;
 }
+
+/**
+ * Remove the searches a test logged as finding nothing.
+ *
+ * `search_miss` is where tike learns which shoes people look for that no shop carries, and
+ * which misspellings matching should learn. The one test that searches for nothing on
+ * purpose runs on every pull request, and it had written 92 of the 99 rows logged in the
+ * week to 2026-09-21: the signal was mostly this suite talking to itself.
+ */
+export async function deleteSearchMisses(query: string): Promise<void> {
+  await sql()`delete from search_miss where query = ${query}`;
+}
