@@ -209,7 +209,7 @@ export function extractGender(name: string): Gender | null {
   // A few names are the shop's internal form, "Z PATIKE LS UNO LITE …", which opens with
   // an audience code rather than a word: M, Z, DJ, U.
   const code = name.match(/^(DJ|M|Z|U)(?=\s)/)?.[1];
-  if (code) return ({ DJ: 'kids', M: 'men', Z: 'women', U: 'unisex' } as const)[code];
+  if (code) return ({ DJ: 'kids', M: 'men', Z: 'women', U: 'unisex' } as const)[code] ?? null;
 
   const head = (name.split(/[Pp]ati|apti|kopa|cipel|perf|runn|ko[sš]ark|\p{Lu}{2}/u)[0] ?? '')
     .toLowerCase()
