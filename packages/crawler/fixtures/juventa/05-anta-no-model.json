@@ -1,0 +1,47 @@
+{
+  "id": 353305,
+  "name": "Muške patike za trčanje",
+  "sku": "812515523-1",
+  "price": 75,
+  "original_price": 75,
+  "hero": "/storage/products/zjPjinGx1BwvvzjUoEiXo5Qamd6Y6GizeLP5yBm8.webp",
+  "images": [
+    "/storage/products/FXh8vOQYibLKJX9LhGGeFe6u1ccohCfxlkHZmqVP.webp",
+    "/storage/products/CTpCP6CANfLGm9lQTgnyYt68T1QqFB2DAZK2nkYt.webp"
+  ],
+  "brand": {
+    "name": "ANTA"
+  },
+  "options": [
+    {
+      "size": "8",
+      "eu_size": "41",
+      "available": true
+    },
+    {
+      "size": "8.5",
+      "eu_size": "42",
+      "available": true
+    },
+    {
+      "size": "9",
+      "eu_size": "42.5",
+      "available": true
+    },
+    {
+      "size": "9.5",
+      "eu_size": "43",
+      "available": false
+    },
+    {
+      "size": "10",
+      "eu_size": "44",
+      "available": false
+    },
+    {
+      "size": "11",
+      "eu_size": "45",
+      "available": true
+    }
+  ]
+}

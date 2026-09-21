@@ -1,0 +1,68 @@
+{
+  "id": 405683,
+  "name": "Muške patike AIR MAX 90",
+  "sku": "DM0029-025",
+  "price": 244,
+  "original_price": 325,
+  "hero": "/storage/products/Bro02bsgUbxLavs3gHfSjjzVc7Yp3jyP3Us9L2WF.webp",
+  "images": [
+    "/storage/products/XZn2t72CzjTMdsJB569KqvGnyBhFHEWgtVBafl0U.webp",
+    "/storage/products/MszscQdnI2PEbo8aS176uS6Dw2sLrjwvnaXnyb4V.webp",
+    "/storage/products/qOb33SQmU7mUWZl5JU333zJmK4ghXO927Sm17UoX.webp"
+  ],
+  "brand": {
+    "name": "NIKE"
+  },
+  "options": [
+    {
+      "size": "8.5",
+      "eu_size": "42",
+      "available": true
+    },
+    {
+      "size": "9",
+      "eu_size": "42.5",
+      "available": false
+    },
+    {
+      "size": "9.5",
+      "eu_size": "43",
+      "available": true
+    },
+    {
+      "size": "10",
+      "eu_size": "44",
+      "available": true
+    },
+    {
+      "size": "10.5",
+      "eu_size": "44.5",
+      "available": true
+    },
+    {
+      "size": "11",
+      "eu_size": "45",
+      "available": true
+    },
+    {
+      "size": "11.5",
+      "eu_size": "45.5",
+      "available": true
+    },
+    {
+      "size": "12",
+      "eu_size": "46",
+      "available": true
+    },
+    {
+      "size": "12.5",
+      "eu_size": "47",
+      "available": true
+    },
+    {
+      "size": "13",
+      "eu_size": "47.5",
+      "available": true
+    }
+  ]
+}

@@ -64,6 +64,13 @@
       "when": 1789575784693,
       "tag": "0008_gigantic_multiple_man",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789999404178,
+      "tag": "0009_amazing_viper",
+      "breakpoints": true
     }
   ]
 }

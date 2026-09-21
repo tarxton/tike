@@ -207,3 +207,29 @@ export function sanitizeMagento2Fixture(html) {
     .filter(Boolean)
     .join('\n');
 }
+
+/**
+ * Juventa answers in JSON, and a product response carries far more than the parser
+ * reads: twelve "related" products with their own prices, the importer's declaration,
+ * a help sidebar. Rebuilt from the keys the parser reads, for the same reason as the
+ * Magento block above: nothing can ride into the repository unnoticed.
+ */
+export function sanitizeJuventaFixture(json) {
+  const p = JSON.parse(json);
+  const fixture = {
+    id: p.id,
+    name: p.name,
+    sku: p.sku,
+    price: p.price,
+    original_price: p.original_price,
+    hero: p.hero,
+    images: p.images,
+    brand: p.brand ? { name: p.brand.name } : null,
+    options: (p.options ?? []).map((o) => ({
+      size: o.size,
+      eu_size: o.eu_size,
+      available: o.available,
+    })),
+  };
+  return JSON.stringify(fixture, null, 2) + '\n';
+}

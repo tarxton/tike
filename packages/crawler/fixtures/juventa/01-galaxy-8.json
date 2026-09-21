@@ -1,0 +1,58 @@
+{
+  "id": 428195,
+  "name": "Muške patike za trčanje GALAXY 8",
+  "sku": "IH9808",
+  "price": 108,
+  "original_price": 108,
+  "hero": "/storage/products/cQRFyMRS3ASAWn6svxw06SwreCWwjFkxyxrk44Me.webp",
+  "images": [
+    "/storage/products/sU6q2S0266dAY9j8aYCLbDwgDaybICRosgmRo1ex.webp",
+    "/storage/products/yYQZK0P1gkHbPZoeUaMrGaE3GNCsGMkrBaanmVhJ.webp",
+    "/storage/products/kftF7QqOZt0O12Du2sdLhUnwoQM4qPywkzUXyK8Z.webp"
+  ],
+  "brand": {
+    "name": "ADIDAS"
+  },
+  "options": [
+    {
+      "size": "7-",
+      "eu_size": "41",
+      "available": true
+    },
+    {
+      "size": "8",
+      "eu_size": "42",
+      "available": true
+    },
+    {
+      "size": "8-",
+      "eu_size": "42.5",
+      "available": true
+    },
+    {
+      "size": "9",
+      "eu_size": "43",
+      "available": true
+    },
+    {
+      "size": "9-",
+      "eu_size": "44",
+      "available": true
+    },
+    {
+      "size": "10-",
+      "eu_size": "45",
+      "available": true
+    },
+    {
+      "size": "12",
+      "eu_size": "47",
+      "available": true
+    },
+    {
+      "size": "12-",
+      "eu_size": "48",
+      "available": true
+    }
+  ]
+}
