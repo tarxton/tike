@@ -45,6 +45,9 @@ export const crawlStatusEnum = pgEnum('crawl_status', [
   'ok',
   'failed',
   'aborted_parse_threshold',
+  // A dry or `--limit` run: it saw a slice of the catalogue, so it must not count as one
+  // of the full passes the staleness rule waits for.
+  'partial',
 ]);
 
 /** Which strategy matched an offer to a canonical product. */

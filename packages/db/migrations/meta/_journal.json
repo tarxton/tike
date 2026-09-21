@@ -71,6 +71,13 @@
       "when": 1789999404178,
       "tag": "0009_amazing_viper",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790010656550,
+      "tag": "0010_amazing_doctor_doom",
+      "breakpoints": true
     }
   ]
 }

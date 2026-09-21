@@ -426,12 +426,16 @@ await withDb(async (db) => {
   const failureRate = attempted === 0 ? 0 : failures.length / attempted;
   const breakerTripped =
     attempted >= MIN_PAGES_FOR_THRESHOLD && failureRate > PARSE_FAILURE_THRESHOLD;
+  // A dry or limited run visited a slice at most. Recorded as `ok`, it counted as one of the
+  // three full passes the staleness rule waits for, so a single test run quietly cut a
+  // shop's grace to two real crawls.
+  const partial = dryRun || Number.isFinite(limit);
 
   await db
     .update(crawlRun)
     .set({
       finishedAt: sql`now()`,
-      status: breakerTripped ? 'aborted_parse_threshold' : 'ok',
+      status: breakerTripped ? 'aborted_parse_threshold' : partial ? 'partial' : 'ok',
       urlsParsed: parsed,
       parseFailures: failures.length,
       itemsChanged: changed,
@@ -460,7 +464,7 @@ await withDb(async (db) => {
   // or dry run visits a slice of the catalogue at most, so retiring after one would mark
   // everything it did not happen to reach as out of stock — a 40-page smoke test would
   // empty the shop.
-  if (dryRun || Number.isFinite(limit)) {
+  if (partial) {
     console.log('partial run: skipping staleness retirement');
     return;
   }
