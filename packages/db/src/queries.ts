@@ -816,6 +816,10 @@ export async function searchOffers(params: SearchParams = {}): Promise<SearchPag
 /**
  * EU sizes that some shop currently has in stock — used to build the size picker,
  * so a user is never offered a number that returns nothing.
+ *
+ * The offer has to be in stock as well as the size. A withdrawn offer keeps its size rows
+ * as they were last read, so without it a shoe taken off the site could still hold a size
+ * open in the picker that the results then could not deliver.
  */
 export async function availableSizes(): Promise<number[]> {
   const rows = await db().execute(sql`
@@ -823,7 +827,7 @@ export async function availableSizes(): Promise<number[]> {
     from offer_size sz
     join offer o on o.id = sz.offer_id
     join shop s on s.id = o.shop_id
-    where sz.in_stock and s.active
+    where sz.in_stock and o.in_stock and s.active
     order by sz.size_eu
   `);
   return (rows.rows as Record<string, unknown>[]).map((r) => Number(r.sizeEu));

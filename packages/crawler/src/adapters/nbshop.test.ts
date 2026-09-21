@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ParseError } from '../errors';
+import { ParseError, UnavailableError } from '../errors';
 import { parseNbshop } from './nbshop';
 
 /**
@@ -275,5 +275,39 @@ describe('malformed JSON-LD', () => {
 
   it('still rejects a page with no product block at all', () => {
     expect(() => parseNbshop('<html><body><h1>nope</h1></body></html>', URL)).toThrow(ParseError);
+  });
+});
+
+/**
+ * A product sold out in every size, captured 2026-09-21 from Buzz and Sport Vision. NBSHOP
+ * drops the Product block on these pages, so they used to count as parse failures and
+ * leave the shoe on tike as in stock until three crawls had passed.
+ */
+describe('sold-out pages', () => {
+  const soldOut = (name: string) =>
+    readFileSync(join(import.meta.dirname, '../../fixtures/nbshop-soldout', name), 'utf8');
+
+  it.each([
+    ['01-buzz.html', 'https://www.buzzsneakers.ba/patike/385769-nike-patike-dunk-low'],
+    ['02-sportvision.html', 'https://www.sportvision.ba/patike/53062797-asics-nimbus-25'],
+  ])('reads %s as sold out, not as broken markup', (name, url) => {
+    expect(() => parseNbshop(soldOut(name), url)).toThrow(UnavailableError);
+  });
+
+  it('still calls it breakage when the page does not say it is sold out', () => {
+    // The Product block gone and nothing else to go on is what a template change looks
+    // like, and the breaker has to keep seeing that.
+    const html = soldOut('01-buzz.html').replace(/nije dostupan/g, 'u korpu');
+    expect(() => parseNbshop(html, 'https://www.buzzsneakers.ba/patike/1-x')).toThrow(ParseError);
+    expect(() => parseNbshop(html, 'https://www.buzzsneakers.ba/patike/1-x')).not.toThrow(
+      UnavailableError,
+    );
+  });
+
+  it('still calls it breakage when any size is still for sale', () => {
+    const html = soldOut('01-buzz.html').replace(/class="ease disabled\s*"/, 'class="ease"');
+    expect(() => parseNbshop(html, 'https://www.buzzsneakers.ba/patike/1-x')).not.toThrow(
+      UnavailableError,
+    );
   });
 });
