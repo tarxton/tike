@@ -22,11 +22,48 @@ const STATUS_MARKER = '\n__tike_status__';
  * special.
  */
 function isRetriable(status: number): boolean {
-  return status >= 500 || status === 408 || status === 425 || status === 429;
+  return (
+    status === NO_RESPONSE || status >= 500 || status === 408 || status === 425 || status === 429
+  );
 }
 const MAX_RETRIES = 3;
 /** Doubles per attempt: 2s, 4s, 8s. Slower than the crawl delay, on purpose. */
 const RETRY_BASE_MS = 2000;
+
+/**
+ * The status recorded for a request that got no HTTP answer at all: the connection was
+ * reset, refused or timed out.
+ *
+ * Retried like a 5xx, because it is the same kind of event: the shop having a bad
+ * minute, not refusing us. One `curl: (35) Recv failure: Connection was reset` on a
+ * single Đak listing threw straight out of the fetcher on 2026-09-20 and ended that
+ * day's crawl partway through, the exact failure the 5xx retry was written to prevent.
+ */
+const NO_RESPONSE = 0;
+
+/**
+ * Whether an exception means the request never got an answer.
+ *
+ * curl reports those as a numeric exit code (7 refused, 28 timed out, 35 and 56 reset),
+ * Node's fetch as a `TypeError('fetch failed')`. Anything else is ours, not the
+ * network's: curl missing from the machine surfaces as `ENOENT`, and retrying that on
+ * every URL would dress up a broken setup as thousands of unreachable pages.
+ */
+function isConnectionFailure(err: unknown): boolean {
+  if (err instanceof TypeError) return err.message === 'fetch failed';
+  return typeof (err as { code?: unknown } | null)?.code === 'number';
+}
+
+function describeFailure(err: unknown): string {
+  const stderr = (err as { stderr?: unknown } | null)?.stderr;
+  const detail =
+    typeof stderr === 'string' && stderr.trim()
+      ? stderr.trim()
+      : err instanceof Error
+        ? String((err.cause as Error | undefined)?.message ?? err.message)
+        : String(err);
+  return detail.slice(0, 160);
+}
 
 /**
  * Polite HTTP client.
@@ -66,7 +103,31 @@ export class PoliteFetcher {
      * obeyed, and a 403 from curl is still treated as a refusal and still fatal.
      */
     private readonly transport: Transport = 'fetch',
+    /** Backoff before the first retry. Only tests have a reason to shorten it. */
+    private readonly retryBaseMs: number = RETRY_BASE_MS,
   ) {}
+
+  /**
+   * One request through the shop's transport, with a failed connection turned into a
+   * status the retry loop understands instead of an exception that ends the crawl.
+   */
+  private async send<T>(
+    request: () => Promise<{ status: number; body: T }>,
+    empty: T,
+  ): Promise<{ status: number; body: T; failure?: string }> {
+    try {
+      return await request();
+    } catch (err) {
+      if (!isConnectionFailure(err)) throw err;
+      return { status: NO_RESPONSE, body: empty, failure: describeFailure(err) };
+    }
+  }
+
+  private fetchError(url: string, status: number, failure: string | undefined): FetchError {
+    const message =
+      status === NO_RESPONSE ? `no response from ${url}: ${failure}` : `${status} from ${url}`;
+    return new FetchError(message, status, url);
+  }
 
   /** Reads robots.txt and adopts its Crawl-delay when stricter than our floor. */
   async init(): Promise<{ crawlDelayMs: number; effectiveDelayMs: number }> {
@@ -109,10 +170,13 @@ export class PoliteFetcher {
         if (wait > 0) await sleep(wait);
         this.lastRequestAt = Date.now();
 
-        const { status, body } =
-          this.transport === 'curl'
-            ? await this.getViaCurl(url, headers)
-            : await this.getViaFetch(url, headers);
+        const { status, body, failure } = await this.send(
+          () =>
+            this.transport === 'curl'
+              ? this.getViaCurl(url, headers)
+              : this.getViaFetch(url, headers),
+          '',
+        );
 
         if (status === 403) {
           throw new ForbiddenError(
@@ -127,12 +191,13 @@ export class PoliteFetcher {
         // page still unvisited; backing off and asking again is both politer and the only
         // way a full pass survives a busy hour.
         if (isRetriable(status) && attempt < MAX_RETRIES) {
-          const backoff = RETRY_BASE_MS * 2 ** attempt;
-          console.warn(`  ${status} from ${url} — retrying in ${backoff}ms`);
+          const backoff = this.retryBaseMs * 2 ** attempt;
+          const what = status === NO_RESPONSE ? `no response (${failure})` : String(status);
+          console.warn(`  ${what} from ${url} — retrying in ${backoff}ms`);
           await sleep(backoff);
           continue;
         }
-        throw new FetchError(`${status} from ${url}`, status, url);
+        throw this.fetchError(url, status, failure);
       }
     });
     this.queue = run.catch(() => undefined);
@@ -158,18 +223,21 @@ export class PoliteFetcher {
         if (wait > 0) await sleep(wait);
         this.lastRequestAt = Date.now();
 
-        const { status, body } =
-          this.transport === 'curl'
-            ? await this.getBinaryViaCurl(url, headers)
-            : await this.getBinaryViaFetch(url, headers);
+        const { status, body, failure } = await this.send(
+          () =>
+            this.transport === 'curl'
+              ? this.getBinaryViaCurl(url, headers)
+              : this.getBinaryViaFetch(url, headers),
+          new Uint8Array(),
+        );
 
         if (status === 403) throw new ForbiddenError(`403 from ${url}`);
         if (status >= 200 && status < 300) return body;
         if (isRetriable(status) && attempt < MAX_RETRIES) {
-          await sleep(RETRY_BASE_MS * 2 ** attempt);
+          await sleep(this.retryBaseMs * 2 ** attempt);
           continue;
         }
-        throw new FetchError(`${status} from ${url}`, status, url);
+        throw this.fetchError(url, status, failure);
       }
     });
     this.queue = run.catch(() => undefined);
