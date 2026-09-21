@@ -1,0 +1,1 @@
+ALTER TYPE "public"."crawl_status" ADD VALUE 'partial';
