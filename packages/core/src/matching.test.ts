@@ -6,6 +6,7 @@ import {
   isPlausibleSizeSpan,
   matchOffers,
   normalizeStyleCode,
+  ProductClusters,
   similarity,
   sizeRangesOverlap,
   type MatchCandidate,
@@ -244,5 +245,68 @@ describe('isPlausibleSizeSpan', () => {
     // Observed in the first real run: "F50 Hyperfast League" came out as 28.00-48.67
     // after union-find chained a junior listing to an adult one.
     expect(isPlausibleSizeSpan([28, 33, 40, 44, 48.67])).toBe(false);
+  });
+});
+
+describe('ProductClusters', () => {
+  const member = (offerId: number, shopId: number, sku: string | null, gender: string | null) => ({
+    offerId,
+    shopId,
+    sku,
+    gender,
+  });
+  const build = (...members: ReturnType<typeof member>[]) => {
+    const c = new ProductClusters();
+    for (const m of members) c.add(m);
+    return c;
+  };
+
+  it('never puts two listings from one shop into a product', () => {
+    const c = build(member(1, 1, null, null), member(2, 2, null, null), member(3, 1, null, null));
+    expect(c.tryUnion(1, 2, 'fuzzy')).toBeNull();
+    // 3 is from the same shop as 1, and would reach it through 2.
+    expect(c.tryUnion(2, 3, 'fuzzy')).toBe('same_shop');
+  });
+
+  it('refuses to chain two style codes together through a listing that has none', () => {
+    // Đak's Skechers "Glide-Step Pro" had no code, matched a men's 233132 at one shop and
+    // a women's 150437 at another, and joined them into one product.
+    const c = build(
+      member(1, 1, '233132-BKCC', 'men'),
+      member(2, 2, '233132-BKCC', 'men'),
+      member(3, 3, null, null),
+      member(4, 4, '150437-TPE', 'women'),
+    );
+    expect(c.tryUnion(1, 2, 'style_code')).toBeNull();
+    expect(c.tryUnion(3, 1, 'fuzzy')).toBeNull();
+    expect(c.tryUnion(3, 4, 'fuzzy')).toBe('style_code');
+    expect(c.find(4)).not.toBe(c.find(1));
+  });
+
+  it('refuses to chain a child’s shoe to an adult one', () => {
+    const c = build(
+      member(1, 1, null, 'men'),
+      member(2, 2, null, null),
+      member(3, 3, null, 'kids'),
+    );
+    expect(c.tryUnion(1, 2, 'fuzzy')).toBeNull();
+    expect(c.tryUnion(2, 3, 'fuzzy')).toBe('gender');
+  });
+
+  it('lets a fuzzy match join a group that already carries the same code', () => {
+    const c = build(
+      member(1, 1, 'HQ2324-600', 'men'),
+      member(2, 2, 'BZA263G611-92', 'men'),
+      member(3, 3, 'HQ2324 600', 'men'),
+    );
+    // A barcode match can put a shop's house code beside the manufacturer's.
+    expect(c.tryUnion(1, 2, 'gtin')).toBeNull();
+    expect(c.tryUnion(3, 2, 'fuzzy')).toBeNull();
+    expect(c.find(3)).toBe(c.find(1));
+  });
+
+  it('leaves barcode and style-code evidence to stand on its own', () => {
+    const c = build(member(1, 1, 'AAA111', 'men'), member(2, 2, 'BBB222', 'women'));
+    expect(c.tryUnion(1, 2, 'gtin')).toBeNull();
   });
 });

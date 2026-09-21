@@ -202,3 +202,122 @@ export function isAutoMergeable(result: MatchResult): boolean {
   if (result.method === 'gtin' || result.method === 'style_code') return true;
   return result.confidence >= FUZZY_ACCEPT;
 }
+
+/** Why a merge of two clusters was turned down. */
+export type RefusalReason = 'same_shop' | 'style_code' | 'gender';
+
+/** What a cluster needs to know about each listing it holds. */
+export interface ClusterMember {
+  offerId: number;
+  shopId: number;
+  sku: string | null;
+  gender: string | null;
+}
+
+/**
+ * Union-find over listings, holding the pairwise rules at the level of the whole group.
+ *
+ * `matchOffers` judges two listings at a time, and union-find then merges transitively,
+ * so every pairwise rule can be walked around through a third listing. Three were:
+ *
+ * - **One shop, one listing per product.** Fifteen Buzz colourways of "Pegasus Premium"
+ *   each matched the one Sport Vision listing of that model, and so each other through it.
+ * - **Style codes that disagree are different shoes.** Đak publishes no code for its
+ *   Skechers, so its "Glide-Step Pro" fuzzy-matched a men's 233132 at one shop and a
+ *   women's 150437 at another, and carried both into one product. 48 products held two
+ *   or more codes after Juventa's first crawl, 36 of them its Skechers.
+ * - **A child's shoe never joins an adult one** (`gendersCompatible`), by the same route.
+ *
+ * The code and gender rules bind fuzzy merges only. A shared barcode or an equal style
+ * code is direct evidence about the two listings in hand, and a shop's house code can
+ * legitimately sit beside the manufacturer's in a barcode-matched group.
+ */
+export class ProductClusters {
+  private parent = new Map<number, number>();
+  private shops = new Map<number, Set<number>>();
+  private codes = new Map<number, Set<string>>();
+  private genders = new Map<number, Set<string>>();
+
+  find(x: number): number {
+    const p = this.parent.get(x);
+    if (p === undefined) {
+      this.parent.set(x, x);
+      return x;
+    }
+    if (p === x) return x;
+    const root = this.find(p);
+    this.parent.set(x, root);
+    return root;
+  }
+
+  /** Registers a listing before any merging happens. */
+  add(member: ClusterMember): void {
+    const root = this.find(member.offerId);
+    setOf(this.shops, root).add(member.shopId);
+    const code = comparableStyleCode(member.sku);
+    if (code) setOf(this.codes, root).add(code);
+    if (member.gender) setOf(this.genders, root).add(member.gender);
+  }
+
+  /**
+   * Merges the clusters holding `a` and `b`, or says why not.
+   *
+   * Returns null on success (including when they are already one cluster).
+   */
+  tryUnion(a: number, b: number, method: MatchMethod): RefusalReason | null {
+    const ra = this.find(a);
+    const rb = this.find(b);
+    if (ra === rb) return null;
+
+    const shopsA = setOf(this.shops, ra);
+    const shopsB = setOf(this.shops, rb);
+    for (const shopId of shopsA) if (shopsB.has(shopId)) return 'same_shop';
+
+    if (method === 'fuzzy') {
+      const codesA = setOf(this.codes, ra);
+      const codesB = setOf(this.codes, rb);
+      if (codesA.size > 0 && codesB.size > 0 && ![...codesA].some((c) => codesB.has(c))) {
+        return 'style_code';
+      }
+      for (const ga of setOf(this.genders, ra)) {
+        for (const gb of setOf(this.genders, rb)) {
+          if (!gendersCompatible(ga, gb)) return 'gender';
+        }
+      }
+    }
+
+    this.parent.set(ra, rb);
+    moveInto(this.shops, ra, rb);
+    moveInto(this.codes, ra, rb);
+    moveInto(this.genders, ra, rb);
+    return null;
+  }
+
+  /** Every cluster, keyed by its root, singletons included. */
+  clusters(): Map<number, number[]> {
+    const out = new Map<number, number[]>();
+    for (const id of this.parent.keys()) {
+      const root = this.find(id);
+      const list = out.get(root) ?? [];
+      list.push(id);
+      out.set(root, list);
+    }
+    return out;
+  }
+}
+
+function setOf<T>(map: Map<number, Set<T>>, key: number): Set<T> {
+  const existing = map.get(key);
+  if (existing) return existing;
+  const created = new Set<T>();
+  map.set(key, created);
+  return created;
+}
+
+function moveInto<T>(map: Map<number, Set<T>>, from: number, into: number): void {
+  const moving = map.get(from);
+  if (!moving) return;
+  const target = setOf(map, into);
+  for (const v of moving) target.add(v);
+  map.delete(from);
+}
