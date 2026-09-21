@@ -257,9 +257,24 @@ test.describe('size picker', () => {
     expect(first!.y).toBeGreaterThanOrEqual(box.y - 1);
     expect(first!.y + first!.height).toBeLessThanOrEqual(box.y + box.height + 1);
 
-    // A scrollbar of our own, because iOS draws none until a scroll is under way — the box
-    // otherwise reads as one that simply cuts the list off.
+    // One scrollbar, never two. On a touch screen it is ours, because iOS draws none until
+    // a scroll is under way and the box read as one that cut the list off. On a desktop it
+    // is the browser's own, and ours drawn beside it made two.
     const thumb = page.locator('#velicine-thumb');
+    const touch = await page.evaluate(
+      () => matchMedia('(hover: none) and (pointer: coarse)').matches,
+    );
+    // Asserted on the style rather than measured: headless Chromium hides native
+    // scrollbars altogether, so a width would read 0 where a real desktop draws one.
+    const nativeScrollbar = await grid(page).evaluate((el) =>
+      getComputedStyle(el).getPropertyValue('scrollbar-width'),
+    );
+    if (!touch) {
+      await expect(page.locator('.size-scrollbar')).toBeHidden();
+      expect(nativeScrollbar, 'the browser keeps its own scrollbar').toBe('thin');
+      return;
+    }
+    expect(nativeScrollbar, 'no native scrollbar beside ours').toBe('none');
     await expect(thumb).toBeVisible();
     const top = async () => {
       const t = await page.locator('.size-scrollbar').boundingBox();
