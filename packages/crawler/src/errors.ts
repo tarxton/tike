@@ -49,9 +49,9 @@ export class FetchError extends Error {
  *
  * Throwing rather than returning an offer with no sizes, because a sold-out configurable
  * carries no usable price either — Magento zeroes them — and inventing one to satisfy the
- * schema would put a fabricated number in front of a shopper. The offer is simply not
- * seen this run, and the staleness rule already retires anything unseen across three
- * successful runs, keeping its price history and its inbound links.
+ * schema would put a fabricated number in front of a shopper. The crawl takes the offer
+ * off the site on the spot instead, keeping the row, its price history and its inbound
+ * links for when the shoe comes back.
  *
  * Only ever thrown once a page has positively identified itself as a product. A template
  * change takes that identification with it and raises `ParseError`, so the breaker still

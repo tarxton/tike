@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
 import type { CheerioAPI } from 'cheerio';
-import { ParseError } from '../errors';
+import { ParseError, UnavailableError } from '../errors';
 import { parsedOfferSchema, type Gender, type ParsedOffer, type RawSize } from '@tike/contracts';
 
 /**
@@ -252,11 +252,33 @@ function extractGender(title: string, description: string | null): Gender | null
   return null;
 }
 
+/**
+ * The page NBSHOP serves for a product sold out in every size.
+ *
+ * It drops the Product JSON-LD altogether, keeps the size list with every size disabled,
+ * and swaps the basket for a disabled "Proizvod više nije dostupan" button. Buzz, Sport
+ * Vision and Sport Reality share the template: it was all 15 of their parse failures in
+ * the 2026-09-21 nightly, each a shoe still showing as in stock on tike.
+ *
+ * Both signs are required, and the size list must be non-empty. A template change that
+ * loses the Product block without the page saying it is sold out still reads as
+ * breakage, so the circuit breaker keeps seeing it.
+ */
+function isSoldOutPage($: CheerioAPI): boolean {
+  const saysUnavailable =
+    $('button.disabled').filter((_, el) => /nije dostupan/i.test($(el).text())).length > 0;
+  const sizes = $('ul.product-attributes li');
+  return saysUnavailable && sizes.length > 0 && sizes.not('.disabled').length === 0;
+}
+
 export function parseNbshop(html: string, url: string): ParsedOffer {
   const $ = cheerio.load(html);
 
   const ld = findProductJsonLd($);
-  if (!ld) throw new ParseError('no schema.org Product JSON-LD found', url);
+  if (!ld) {
+    if (isSoldOutPage($)) throw new UnavailableError('product is sold out in every size', url);
+    throw new ParseError('no schema.org Product JSON-LD found', url);
+  }
 
   const externalId = String(ld.productID ?? '').trim();
   if (!externalId) throw new ParseError('product has no productID', url);

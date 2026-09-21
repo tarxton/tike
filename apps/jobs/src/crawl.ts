@@ -260,6 +260,8 @@ await withDb(async (db) => {
   let changed = 0;
   /** Read fine, nothing to sell. Reported, but kept out of the failure budget. */
   let unavailable = 0;
+  /** Of those, how many tike was still showing as in stock. */
+  let soldOutWithdrawn = 0;
   /** Never fetched, after retries. Not the shop's markup and not ours. */
   const unreachable: { url: string; reason: string }[] = [];
 
@@ -379,9 +381,24 @@ await withDb(async (db) => {
       // A product the shop has sold out of is not a failure of any kind. Magento lists
       // its whole history in the sitemap and 70% of Djak's sneakers are gone, so counting
       // these would hold that shop permanently over the breaker while its markup is fine.
-      // The offer is simply not seen this run; the staleness rule retires it after three.
       if (err instanceof UnavailableError) {
         unavailable += 1;
+        /*
+         * And it comes off the site now, not three crawls from now.
+         *
+         * The staleness rule exists for pages the crawler could not read, where a missed
+         * page says nothing about stock. This page was read, and the shop itself says the
+         * shoe is gone: waiting out three runs left it on tike as available for days,
+         * sending people to a page with nothing to buy. The row is kept, as the rule keeps
+         * it, so its price history and links survive and a restock simply writes it back.
+         */
+        if (!dryRun) {
+          const withdrawn = await db.execute(sql`
+            update offer set in_stock = false, last_seen_at = now()
+            where shop_id = ${row.id} and url = ${url} and in_stock
+          `);
+          soldOutWithdrawn += withdrawn.rowCount ?? 0;
+        }
         continue;
       }
       // One unreachable page costs that page, not the thousands still unvisited. Counted,
@@ -426,7 +443,7 @@ await withDb(async (db) => {
 
   console.log(
     `\nrun ${runId}: parsed=${parsed} failed=${failures.length} written=${changed} ` +
-      `sold-out=${unavailable} unreachable=${unreachable.length} ` +
+      `sold-out=${unavailable} withdrawn=${soldOutWithdrawn} unreachable=${unreachable.length} ` +
       `failure-rate=${(failureRate * 100).toFixed(1)}%`,
   );
 

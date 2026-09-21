@@ -87,6 +87,13 @@ export function sanitizeFixture(html) {
   const breadcrumb = $('.breadcrumb').first().toString() ?? '';
   const sizes = $('.product-attributes-wrapper').first().toString() ?? '';
   const heading = $('h1').first().toString() ?? '';
+  // The disabled "Proizvod više nije dostupan" button a sold-out page shows in place of
+  // the basket: with no Product block left, it is how the parser knows the page is one.
+  const soldOut =
+    $('button.disabled')
+      .filter((_, el) => /nije dostupan/i.test($(el).text()))
+      .first()
+      .toString() ?? '';
 
   return [
     '<!doctype html>',
@@ -99,6 +106,7 @@ export function sanitizeFixture(html) {
     heading,
     breadcrumb,
     sizes,
+    soldOut,
     '</body>',
     '</html>',
     '',
