@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     'next-env.d.ts',
     // OpenNext's Workers bundle: generated, minified, and not ours to lint.
     '.open-next/**',
+    // Playwright's output after a failing run: a bundled trace viewer, not source.
+    'playwright-report/**',
+    'test-results/**',
   ]),
 ]);
 

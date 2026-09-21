@@ -134,7 +134,7 @@
   );
   overflow-y: auto;
   overscroll-behavior: contain;
-  /* Where a browser styles its own scrollbar, this is the one to use. */
+  /* The desktop scrollbar: the browser's own, thin. Touch screens get ours, below. */
   scrollbar-width: thin;
   scrollbar-color: #a3a3a3 #f0f0f0;
 }
@@ -146,13 +146,18 @@
 }
 
 /*
- * A scrollbar of our own, for the browsers that hide theirs.
+ * A scrollbar of our own, on touch screens only.
  *
  * iOS shows an overlay scrollbar only while a scroll is happening, and ignores
  * `::-webkit-scrollbar` entirely, so the full view read as a box that cut the list off —
  * reported from an iPhone 15. The track sits in a gutter beside the grid, never over the
  * chips, and exists only while the full view is open. The thumb's height and position come
  * from the scroll position, in SizeGridScroll.
+ *
+ * Only where the pointer is a finger. A desktop browser draws its own scrollbar, and
+ * drawing ours as well put two side by side; there, the native one styled above is the
+ * scrollbar. On a touch screen the native one is hidden instead, so Android's overlay
+ * cannot appear beside ours mid-scroll either.
  */
 .size-grid-wrap {
   position: relative;
@@ -162,19 +167,29 @@
   display: none;
 }
 
-.peer:checked ~ .size-grid-wrap {
-  padding-right: 16px;
-}
+@media (hover: none) and (pointer: coarse) {
+  .peer:checked ~ .size-grid-wrap {
+    padding-right: 16px;
+  }
 
-.peer:checked ~ .size-grid-wrap .size-scrollbar {
-  display: block;
-  position: absolute;
-  top: 4px;
-  right: 0;
-  bottom: 4px;
-  width: 8px;
-  border-radius: 999px;
-  background: #e5e5e5;
+  .peer:checked ~ .size-grid-wrap .size-grid {
+    scrollbar-width: none;
+  }
+
+  .peer:checked ~ .size-grid-wrap .size-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .peer:checked ~ .size-grid-wrap .size-scrollbar {
+    display: block;
+    position: absolute;
+    top: 4px;
+    right: 0;
+    bottom: 4px;
+    width: 8px;
+    border-radius: 999px;
+    background: #e5e5e5;
+  }
 }
 
 .size-scrollbar-thumb {

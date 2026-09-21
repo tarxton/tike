@@ -12,9 +12,9 @@ import { useEffect } from 'react';
  *
  * **That it scrolls at all.** iOS draws no scrollbar until a scroll is already happening
  * and ignores `::-webkit-scrollbar`, so on a phone the box looked like a box that simply
- * cut its contents off — reported from an iPhone 15. `scrollbar-width: thin` in the CSS
- * covers the browsers that style their own; this draws a real track and thumb for the ones
- * that do not, sized and moved from the scroll position.
+ * cut its contents off — reported from an iPhone 15. On a touch screen the CSS shows a
+ * track of our own and this sizes and moves its thumb from the scroll position; on a
+ * desktop the CSS leaves the browser's scrollbar alone and the thumb is simply not shown.
  *
  * Without JavaScript the toggle still works, the box still scrolls, and the only loss is
  * that it starts at the top with whatever scrollbar the browser draws.
