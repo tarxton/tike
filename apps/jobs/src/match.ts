@@ -15,11 +15,13 @@
 import { sql } from 'drizzle-orm';
 import {
   cleanModel,
+  comparableStyleCode,
   isPlaceholderModel,
   isAutoMergeable,
   isPlausibleSizeSpan,
   matchOffers,
   normalizeForSearch,
+  ProductClusters,
   slugify,
   type MatchCandidate,
   type MatchMethod,
@@ -48,78 +50,6 @@ interface Row extends MatchCandidate {
   title: string;
   imageUrl: string | null;
   shopId: number;
-}
-
-/**
- * Union-find that refuses to put two listings from one shop into the same product.
- *
- * `matchOffers` already rejects same-shop pairs, but union-find merges transitively and
- * that guard cannot see it coming: fifteen Buzz colourways of "Pegasus Premium" each
- * matched the one Sport Vision listing of that model, and so each other through it —
- * one card standing in for fifteen different shoes.
- *
- * A shop lists a given product once. Enforcing that on the finished cluster, not only
- * on the pair, is what makes the rule actually hold.
- */
-class Groups {
-  private parent = new Map<number, number>();
-  /** Shops represented in a cluster, tracked on its root. */
-  private shops = new Map<number, Set<number>>();
-
-  find(x: number): number {
-    const p = this.parent.get(x);
-    if (p === undefined) {
-      this.parent.set(x, x);
-      return x;
-    }
-    if (p === x) return x;
-    const root = this.find(p);
-    this.parent.set(x, root);
-    return root;
-  }
-
-  private shopsOf(root: number): Set<number> {
-    const existing = this.shops.get(root);
-    if (existing) return existing;
-    const created = new Set<number>();
-    this.shops.set(root, created);
-    return created;
-  }
-
-  /** Registers an offer and the shop that listed it, before any merging happens. */
-  add(offerId: number, shopId: number): void {
-    this.shopsOf(this.find(offerId)).add(shopId);
-  }
-
-  /**
-   * Merges two clusters unless that would give one shop two listings of the same
-   * product. Returns false when the merge was refused.
-   */
-  tryUnion(a: number, b: number): boolean {
-    const ra = this.find(a);
-    const rb = this.find(b);
-    if (ra === rb) return true;
-
-    const sa = this.shopsOf(ra);
-    const sb = this.shopsOf(rb);
-    for (const shopId of sa) if (sb.has(shopId)) return false;
-
-    this.parent.set(ra, rb);
-    for (const shopId of sa) sb.add(shopId);
-    this.shops.delete(ra);
-    return true;
-  }
-
-  clusters(): Map<number, number[]> {
-    const out = new Map<number, number[]>();
-    for (const id of this.parent.keys()) {
-      const root = this.find(id);
-      const list = out.get(root) ?? [];
-      list.push(id);
-      out.set(root, list);
-    }
-    return out;
-  }
 }
 
 await withDb(async (db) => {
@@ -181,8 +111,8 @@ await withDb(async (db) => {
     byBrand.set(key, list);
   }
 
-  const groups = new Groups();
-  for (const c of candidates) groups.add(c.offerId, c.shopId);
+  const groups = new ProductClusters();
+  for (const c of candidates) groups.add(c);
 
   const methodOf = new Map<number, MatchMethod>();
   const review: { a: Row; b: Row; confidence: number }[] = [];
@@ -211,14 +141,15 @@ await withDb(async (db) => {
   // refused: a barcode match has to win the slot before a fuzzy title can take it.
   mergeable.sort((x, y) => y.result.confidence - x.result.confidence);
 
-  let contested = 0;
+  const refused = { same_shop: 0, style_code: 0, gender: 0 };
   for (const { a, b, result } of mergeable) {
-    if (groups.tryUnion(a.offerId, b.offerId)) {
-      methodOf.set(a.offerId, result.method);
-      methodOf.set(b.offerId, result.method);
-    } else {
-      contested += 1;
+    const refusal = groups.tryUnion(a.offerId, b.offerId, result.method);
+    if (refusal) {
+      refused[refusal] += 1;
+      continue;
     }
+    methodOf.set(a.offerId, result.method);
+    methodOf.set(b.offerId, result.method);
   }
 
   // Union-find merges transitively, so a pairwise guard is not enough: a junior listing
@@ -244,6 +175,15 @@ await withDb(async (db) => {
 
   const grouped = clusters.reduce((n, ids) => n + ids.length, 0);
 
+  // Products holding more than one style code. A barcode match can legitimately put a
+  // shop's house code beside the manufacturer's, so this is not always wrong, but it is
+  // the number that exposed fuzzy matches chaining different shoes together (48 on
+  // 2026-09-21), so it is reported every run.
+  const mixedCodes = clusters.filter(
+    (ids) =>
+      new Set(ids.map((id) => comparableStyleCode(byId.get(id)!.sku)).filter(Boolean)).size > 1,
+  ).length;
+
   // A shoe only one shop sells is still a shoe.
   //
   // Singles used to keep product_id null, which meant they had no product page and a
@@ -258,7 +198,9 @@ await withDb(async (db) => {
     `compared ${comparisons} pairs within ${byBrand.size} brands\n` +
       `  merged:  ${clusters.length} products from ${grouped} offers\n` +
       `  dropped: ${rejected.length} groups spanning an implausible size range\n` +
-      `  refused: ${contested} merges that would have doubled up one shop\n` +
+      `  refused: ${refused.same_shop} merges that would have doubled up one shop, ` +
+      `${refused.style_code} joining different style codes, ${refused.gender} mixing genders\n` +
+      `  mixed:   ${mixedCodes} products holding more than one style code\n` +
       `  review:  ${review.length} uncertain pairs (left unmatched)\n` +
       `  singles: ${candidates.length - grouped} offers with no counterpart (still products)`,
   );
