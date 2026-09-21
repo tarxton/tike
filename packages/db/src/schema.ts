@@ -29,6 +29,7 @@ export const platformEnum = pgEnum('platform', [
   'woo',
   'shopify',
   'officeshoes',
+  'juventa',
   'feed',
 ]);
 

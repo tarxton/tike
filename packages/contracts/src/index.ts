@@ -14,6 +14,7 @@ export const platformSchema = z.enum([
   'woo',
   'shopify',
   'officeshoes',
+  'juventa',
   'feed',
 ]);
 export type Platform = z.infer<typeof platformSchema>;
@@ -93,6 +94,20 @@ export const crawlConfigSchema = z.object({
         pageSize: z.number().int().positive().default(48),
         /** Refuses to walk forever if a shop keeps answering 200 with content. */
         maxPages: z.number().int().positive().default(40),
+      }),
+      /**
+       * Juventa's own JSON catalogue API, the one its storefront renders from.
+       *
+       * Its pages are an empty Vue shell, so there is no HTML to read and no sitemap to
+       * follow; `/getItems` lists products 20 at a time, filtered by the shop's own
+       * product-type ids, and `/getProduct/{id}` returns one product with every size.
+       */
+      z.object({
+        kind: z.literal('juventaApi'),
+        /** The shop's product types to list: its sneaker types, not apparel or boots. */
+        typeIds: z.array(z.string().min(1)).min(1),
+        /** Refuses to walk forever if the API keeps answering with products. */
+        maxPages: z.number().int().positive().default(150),
       }),
     ])
     .default({ kind: 'sitemap' }),

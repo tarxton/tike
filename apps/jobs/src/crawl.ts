@@ -21,7 +21,10 @@ import {
   filterByPathContains,
   isSitemapIndex,
   isSoftNotFound,
+  juventaListingUrl,
+  juventaProductApiUrl,
   listingPageUrl,
+  parseJuventaListing,
   parseListingProducts,
   parseSitemapLocs,
   parserFor,
@@ -124,6 +127,39 @@ async function discoverFromCategories(
 }
 
 /**
+ * Juventa's catalogue API: its listing, filtered to the sneaker types, twenty at a time.
+ *
+ * Yields API URLs rather than storefront ones, because the storefront is an empty shell
+ * and the API is what carries the data. The parser turns each back into the page a
+ * shopper opens. The walk ends at the shop's own total, or at a page that adds nothing
+ * new, which also covers a listing that reshuffles while it is being read.
+ */
+async function discoverFromJuventaApi(
+  fetcher: PoliteFetcher,
+  baseUrl: string,
+  discovery: { typeIds: string[]; maxPages: number },
+  /** `--limit`: stop listing once this many are found, since every page costs the shop ~13s. */
+  enough: number,
+): Promise<string[]> {
+  const ids = new Set<string>();
+  let total = 0;
+  let pages = 0;
+  for (let page = 1; page <= discovery.maxPages; page += 1) {
+    const listing = parseJuventaListing(
+      await fetcher.get(juventaListingUrl(baseUrl, discovery.typeIds, page)),
+      page,
+    );
+    pages += 1;
+    total = listing.total;
+    const before = ids.size;
+    for (const id of listing.ids) ids.add(id);
+    if (listing.last || ids.size === before || ids.size >= enough) break;
+  }
+  console.log(`  listing: ${pages} pages, ${ids.size} products (shop reports ${total})`);
+  return [...ids].map((id) => juventaProductApiUrl(baseUrl, id));
+}
+
+/**
  * Mark offers the shop has stopped listing as out of stock.
  *
  * They are never deleted: the URL may still resolve, the price history is worth keeping,
@@ -174,7 +210,9 @@ await withDb(async (db) => {
   const discovered =
     config.discovery.kind === 'sitemap'
       ? await discoverFromSitemap(fetcher, row.sitemapUrl!)
-      : await discoverFromCategories(fetcher, row.baseUrl, config.discovery);
+      : config.discovery.kind === 'paginated'
+        ? await discoverFromCategories(fetcher, row.baseUrl, config.discovery)
+        : await discoverFromJuventaApi(fetcher, row.baseUrl, config.discovery, limit);
 
   // Shops list their whole catalogue; keep only the categories tike covers. Apparel is
   // out of scope, not a parse failure, so it must be excluded before fetching.

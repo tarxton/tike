@@ -8,11 +8,11 @@ sell you today — with prices compared across shops.
 
 **Live:** <https://tike-web.tarxton-2004.workers.dev>
 
-> Status: six retailers ingested — Buzz Sneaker Station, Office Shoes, Sport Reality,
-> Sport Vision, Đak Sport and The Spot — currently around **10,000 in-stock listings**
-> across **9,000 products**, refreshed nightly. Search, size filtering, cross-shop price
-> comparison and tracked click-out are live. Not yet on a real domain, and deliberately not
-> indexable until it is.
+> Status: seven retailers ingested — Buzz Sneaker Station, Office Shoes, Sport Reality,
+> Sport Vision, Đak Sport, The Spot and Juventa Sport — currently over **10,000 in-stock
+> listings** across **9,000 products**, refreshed nightly. Search, size filtering,
+> cross-shop price comparison and tracked click-out are live. Not yet on a real domain,
+> and deliberately not indexable until it is.
 
 ## How it works
 
@@ -38,7 +38,8 @@ sell you today — with prices compared across shops.
 
 Shops are ingested by **platform adapter**, not by bespoke scraper: one NBSHOP adapter covers
 three BiH retailers, and a Magento 2 adapter covers Đak Sport and The Spot. Adding a shop on a
-known platform is a config row, not code — The Spot was exactly that.
+known platform is a config row, not code — The Spot was exactly that. Juventa Sport has no
+markup to read at all, so its adapter reads the JSON API its own storefront calls.
 
 The interesting problems are in `packages/core` and `apps/jobs`:
 
@@ -62,15 +63,15 @@ The interesting problems are in `packages/core` and `apps/jobs`:
 
 ## Repository layout
 
-| Path                 | Contents                                                  |
-| -------------------- | --------------------------------------------------------- |
-| `apps/web`           | Next.js site, API route handlers, outclick redirect       |
-| `apps/jobs`          | crawl / match / image processors, run on a schedule       |
-| `packages/core`      | framework-free domain logic: sizes, money, text, matching |
-| `packages/crawler`   | platform adapters (NBSHOP, Magento 2, Office Shoes)       |
-| `packages/db`        | Drizzle schema, migrations and read queries               |
-| `packages/contracts` | Zod schemas shared across every boundary                  |
-| `docs/adr`           | architecture decision records                             |
+| Path                 | Contents                                                     |
+| -------------------- | ------------------------------------------------------------ |
+| `apps/web`           | Next.js site, API route handlers, outclick redirect          |
+| `apps/jobs`          | crawl / match / image processors, run on a schedule          |
+| `packages/core`      | framework-free domain logic: sizes, money, text, matching    |
+| `packages/crawler`   | platform adapters (NBSHOP, Magento 2, Office Shoes, Juventa) |
+| `packages/db`        | Drizzle schema, migrations and read queries                  |
+| `packages/contracts` | Zod schemas shared across every boundary                     |
+| `docs/adr`           | architecture decision records                                |
 
 ## Local setup
 

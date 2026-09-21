@@ -1,0 +1,58 @@
+{
+  "id": 360338,
+  "name": "Muške patikeS UNO RUGGED - WAT-AIR-PROOF OLV",
+  "sku": "183048-OLV",
+  "price": 162,
+  "original_price": 215,
+  "hero": "/storage/products/HCAmMjJMFHJao8mH3WTKodu4NCXSBQ0qpvcgXnk3.webp",
+  "images": [
+    "/storage/products/o9AXo6G23h2PlyCpg3T9uvRnaAlWCSy5Z98TAwF3.webp",
+    "/storage/products/NGWOyo0jCWxy7d7gNsVHc9znltPCnQmSAZGdztuG.webp",
+    "/storage/products/VSJynRui4TX5kfvaUkb93bXF6IDbrkgPEuydho9c.webp"
+  ],
+  "brand": {
+    "name": "SKECHERS"
+  },
+  "options": [
+    {
+      "size": "41.5",
+      "eu_size": "41.5",
+      "available": true
+    },
+    {
+      "size": "42",
+      "eu_size": "42",
+      "available": true
+    },
+    {
+      "size": "42.5",
+      "eu_size": "42.5",
+      "available": true
+    },
+    {
+      "size": "43",
+      "eu_size": "43",
+      "available": true
+    },
+    {
+      "size": "44",
+      "eu_size": "44",
+      "available": true
+    },
+    {
+      "size": "45",
+      "eu_size": "45",
+      "available": true
+    },
+    {
+      "size": "46",
+      "eu_size": "46",
+      "available": true
+    },
+    {
+      "size": "47.5",
+      "eu_size": "47.5",
+      "available": true
+    }
+  ]
+}

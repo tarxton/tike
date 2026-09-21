@@ -1,0 +1,48 @@
+{
+  "id": 403060,
+  "name": "Ženske patike ADIDAS BRMD",
+  "sku": "IH4189",
+  "price": 162,
+  "original_price": 215,
+  "hero": "/storage/products/f413kmwL8ixNyp8nNeSDr0EHw6tNdvb2Shj5SBgc.webp",
+  "images": [
+    "/storage/products/Hl2KgSnu21wGs4sk2kIdcaxh1OciZdcuUQL34h47.webp",
+    "/storage/products/IPM1YMoCA87sf965faMBoKECdhbvQ87mv0wTehoV.webp",
+    "/storage/products/Jr16LGw0D7T59EjqT0iCwWWT5sAZx2i2K3OmAivz.webp"
+  ],
+  "brand": {
+    "name": "ADIDAS"
+  },
+  "options": [
+    {
+      "size": "4-",
+      "eu_size": "37",
+      "available": true
+    },
+    {
+      "size": "5",
+      "eu_size": "38",
+      "available": true
+    },
+    {
+      "size": "5-",
+      "eu_size": "38.5",
+      "available": true
+    },
+    {
+      "size": "6",
+      "eu_size": "39",
+      "available": true
+    },
+    {
+      "size": "6-",
+      "eu_size": "40",
+      "available": true
+    },
+    {
+      "size": "7-",
+      "eu_size": "41",
+      "available": true
+    }
+  ]
+}

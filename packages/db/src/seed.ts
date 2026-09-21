@@ -137,6 +137,40 @@ const shops = [
       runsInCi: false,
     },
   },
+  {
+    // A Vue storefront with no sitemap and no markup, read through the JSON API its own
+    // pages call. robots.txt disallows nothing, there is no Cloudflare in front, and
+    // tike-bot gets 200 from home, so the nightly CI crawl covers it.
+    slug: 'juventa',
+    logoUrl: '/shops/juventa.png',
+    name: 'Juventa Sport',
+    baseUrl: 'https://juventasport.com',
+    platform: 'juventa' as const,
+    sitemapUrl: null,
+    minDelayMs: 1200,
+    maxConcurrency: 1,
+    crawlConfig: {
+      discovery: {
+        kind: 'juventaApi' as const,
+        // Every "Patike …" type in the shop's own taxonomy: lifestyle, running, training,
+        // indoor, turf, basketball, handball, tennis, volleyball, trekking. Football boots,
+        // slides, sandals and boots are separate types and stay out, as at the other shops.
+        typeIds: [
+          '9000',
+          '8980',
+          '9574',
+          '9653',
+          '9657',
+          '9951',
+          '11152',
+          '12322',
+          '12913',
+          '19641',
+        ],
+        maxPages: 150,
+      },
+    },
+  },
 ];
 
 await withDb(async (db) => {
