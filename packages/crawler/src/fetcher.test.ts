@@ -11,6 +11,8 @@ import { PoliteFetcher } from './fetcher';
 let server: Server;
 let base: string;
 const hangUps = new Map<string, number>();
+/** Requests answered with headers and half a body, then cut off. */
+const cutOffs = new Map<string, number>();
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -18,6 +20,14 @@ beforeAll(async () => {
     if (left > 0) {
       hangUps.set(req.url!, left - 1);
       req.socket.destroy();
+      return;
+    }
+    const cut = cutOffs.get(req.url ?? '') ?? 0;
+    if (cut > 0) {
+      cutOffs.set(req.url!, cut - 1);
+      res.writeHead(200, { 'content-type': 'text/plain', 'content-length': '1000' });
+      res.write('half a page');
+      setTimeout(() => req.socket.destroy(), 20);
       return;
     }
     if (req.url === '/robots.txt') {
@@ -41,6 +51,13 @@ describe.each(['fetch', 'curl'] as const)('PoliteFetcher over %s', (transport) =
     const f = fetcher();
     await f.init();
     await expect(f.get(`${base}/flaky-${transport}`)).resolves.toBe(`ok /flaky-${transport}`);
+  });
+
+  it('asks again when the connection drops partway through the page', async () => {
+    cutOffs.set(`/cut-${transport}`, 1);
+    const f = fetcher();
+    await f.init();
+    await expect(f.get(`${base}/cut-${transport}`)).resolves.toBe(`ok /cut-${transport}`);
   });
 
   it('gives up with a FetchError the crawl can count, not an exception that ends it', async () => {

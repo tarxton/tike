@@ -42,15 +42,17 @@ const RETRY_BASE_MS = 2000;
 const NO_RESPONSE = 0;
 
 /**
- * Whether an exception means the request never got an answer.
+ * Whether an exception means the request never got a complete answer.
  *
  * curl reports those as a numeric exit code (7 refused, 28 timed out, 35 and 56 reset),
- * Node's fetch as a `TypeError('fetch failed')`. Anything else is ours, not the
+ * Node's fetch as a `TypeError`: 'fetch failed' before the response, 'terminated' when
+ * the connection drops partway through the body. Anything else is ours, not the
  * network's: curl missing from the machine surfaces as `ENOENT`, and retrying that on
  * every URL would dress up a broken setup as thousands of unreachable pages.
  */
 function isConnectionFailure(err: unknown): boolean {
-  if (err instanceof TypeError) return err.message === 'fetch failed';
+  if (err instanceof TypeError)
+    return err.message === 'fetch failed' || err.message === 'terminated';
   return typeof (err as { code?: unknown } | null)?.code === 'number';
 }
 
