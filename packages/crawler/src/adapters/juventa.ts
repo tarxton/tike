@@ -206,6 +206,11 @@ function extractImages(product: ProductResponse, url: string): string[] {
  * Children are checked first, as in every adapter.
  */
 export function extractGender(name: string): Gender | null {
+  // A few names are the shop's internal form, "Z PATIKE LS UNO LITE …", which opens with
+  // an audience code rather than a word: M, Z, DJ, U.
+  const code = name.match(/^(DJ|M|Z|U)(?=\s)/)?.[1];
+  if (code) return ({ DJ: 'kids', M: 'men', Z: 'women', U: 'unisex' } as const)[code] ?? null;
+
   const head = (name.split(/[Pp]ati|apti|kopa|cipel|perf|runn|ko[sš]ark|\p{Lu}{2}/u)[0] ?? '')
     .toLowerCase()
     .replace(/[^\p{L}]/gu, '');
@@ -232,20 +237,28 @@ export function extractGender(name: string): Gender | null {
  * ("INDOOR TIEMPO STREETGATO"); the model's own suffix, IC or TF, already says it where
  * it matters. The shop's typos are real rows too, and all of these parse:
  * "patikeTURF PHANTOM 6" with the space missing, "patikeS UNO RUGGED" with a stray capital
- * glued on, and "AIR MAX FIRE)" with a stray bracket.
+ * glued on, and "AIR MAX FIRE)" with a stray bracket. Eighteen names are the shop's
+ * internal form instead ("Z PATIKE LS RUN 70S 2.0 FTWWHT/CBLACK/GREONE"): the category in
+ * capitals, a type code, and a colour list at the end.
  */
 export function extractModel(name: string): string {
   // "patikeTURF" -> "patike TURF". Two capitals at least, so a lone stray capital glued to
   // the category word ("patikeS UNO") stays with it and goes when the category word goes.
   const spaced = name.replace(/(\p{Ll})(\p{Lu}{2,})/gu, '$1 $2');
-  const category = spaced.match(/(?:[Pp]ati[kc]|aptik|kopa[cč]k|cipel)\p{Ll}*(?:\p{Lu}(?=\s))?/u);
+  const category = spaced.match(
+    /(?:[Pp]ati[kc]|aptik|kopa[cč]k|cipel)\p{Ll}*(?:\p{Lu}(?=\s))?|PATI[KC][AE](?=\s)/u,
+  );
   let model = category ? spaced.slice((category.index ?? 0) + category[0].length) : spaced;
 
   const words = model.trim().split(/\s+/);
   while (words.length > 0 && !/\p{Lu}|\d/u.test(words[0]!)) words.shift();
   model = words.join(' ');
 
+  // LS and GS are the shop's own codes (lifestyle, grade school) in its internal names.
+  model = model.replace(/^(?:LS|GS)\s+(?=\S)/, '');
   model = model.replace(/^(?:INDOOR|TURF|TREK|TRAIL SHOES)\s+(?=\S)/, '');
+  // Internal names end in the colourway as a slash list: "FTWWHT/CBLACK/GREONE".
+  model = model.replace(/\s+\S*\/\S*$/, '');
   if (!model.includes('(')) model = model.replace(/\)/g, '');
   return model.replace(/\s+/g, ' ').trim();
 }

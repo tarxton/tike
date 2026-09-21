@@ -49,6 +49,15 @@ describe('extractModel', () => {
     expect(extractModel('Dječije patike AIR MAX FIRE)')).toBe('AIR MAX FIRE');
   });
 
+  it('reads the shop’s internal form of a name', () => {
+    expect(extractModel('Z PATIKE LS RUN 70S 2.0 FTWWHT/CBLACK/GREONE')).toBe('RUN 70S 2.0');
+    expect(extractModel('Dječije PATIKA LS NIKE AIR MAX INVIGOR GS')).toBe(
+      'NIKE AIR MAX INVIGOR GS',
+    );
+    expect(extractModel('DJ M PATIKE GS UNO LITE - DELODOX')).toBe('UNO LITE - DELODOX');
+    expect(extractModel('Dječije patike LS K 327')).toBe('K 327');
+  });
+
   it('falls back to everything after the category word when nothing is in capitals', () => {
     expect(extractModel('Muške patike Field Jupiter Engineered')).toBe('Field Jupiter Engineered');
   });
@@ -78,6 +87,9 @@ describe('extractGender', () => {
     ['Dječije kopačke F50 HYPERFAST CLUB TF', 'kids'],
     ['Unisex patike za odbojku WAVE MOMENTUM PRO MID', 'unisex'],
     ['Patike za odbojku WAVE MOMENTUM', null],
+    ['Z PATIKE LS UNO LITE - SHIMMER ALONG BBK', 'women'],
+    ['DJ PATIKE LS PUMA KARMEN II IDOL', 'kids'],
+    ['DJ I Z PATIKE LS HEART LIGHTS - LOVIN REFLECTI NVHP', 'kids'],
   ])('%s -> %s', (name, gender) => {
     expect(extractGender(name)).toBe(gender);
   });
