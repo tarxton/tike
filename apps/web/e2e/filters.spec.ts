@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { exactAndVariationCase, searchTerm, sizeCase } from './support/catalogue';
+import {
+  deleteSearchMisses,
+  exactAndVariationCase,
+  searchTerm,
+  sizeCase,
+} from './support/catalogue';
 import { cards, parsePrice, resultCount } from './support/page-helpers';
 
 /**
@@ -10,11 +15,18 @@ import { cards, parsePrice, resultCount } from './support/page-helpers';
  * cheap to see and none of them showed up in a unit test.
  */
 
+/** A query nothing can match, so the empty state is the one offering the way out. */
+const NOTHING = 'qzzxvnothing';
+
 test.describe('filters', () => {
+  // The site logs a search that finds nothing, and this one is not a visitor's.
+  test.afterAll(async () => {
+    await deleteSearchMisses(NOTHING);
+  });
+
   test('"Obriši filtere" empties the size picker, not only the URL', async ({ page }) => {
     const { size } = await sizeCase();
-    // A query nothing can match, so the empty state is the one offering the way out.
-    await page.goto(`/patike?velicina=${size}&q=qzzxvnothing`);
+    await page.goto(`/patike?velicina=${size}&q=${NOTHING}`);
     await expect(page.getByText('Nema rezultata za tu pretragu.')).toBeVisible();
 
     const chip = page.locator(`input[name="velicina"][value="${size}"]`);
