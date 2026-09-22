@@ -4,6 +4,7 @@ import { PoliteFetcher } from '@tike/crawler';
 import { crawlConfigSchema } from '@tike/contracts';
 import { putObject, r2Client, readR2Config, R2NotConfiguredError } from './r2';
 import { normalizeImage, objectKey, packshotScore, PACKSHOT_MIN_WHITE } from './normalize-image';
+import { storeBrandLogos } from './brand-logos';
 
 /**
  * Copy product images into our own storage.
@@ -245,6 +246,21 @@ async function main(): Promise<void> {
     await Promise.all([...byShop.values()].map(runShop));
 
     console.log(`\nstored=${stored} failed=${failed} scenes-rejected=${scenesSkipped}`);
+
+    // Brand logos ride on the same fetchers, so they keep the same politeness and the
+    // same reach: a run that cannot see Đak leaves Đak's logos for the one that can.
+    const logos = await storeBrandLogos({
+      db,
+      fetchers,
+      client,
+      config,
+      shopSlug: shopSlug ?? null,
+      dryRun,
+    });
+    console.log(
+      `brand logos: stored=${logos.stored} rejected=${logos.rejected} ` +
+        `waiting-for-another-run=${logos.waiting}`,
+    );
   });
 }
 

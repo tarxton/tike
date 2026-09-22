@@ -296,6 +296,7 @@ await withDb(async (db) => {
             sku: normalized.sku,
             imageUrl: normalized.imageUrl,
             imageUrls: normalized.imageUrls,
+            brandLogoUrl: normalized.brandLogoUrl,
             gender: normalized.gender,
             priceMinor: normalized.price.amountMinor,
             originalPriceMinor: normalized.originalPrice?.amountMinor ?? null,
@@ -332,6 +333,7 @@ await withDb(async (db) => {
                 else excluded.image_url
               end`,
               imageUrls: normalized.imageUrls,
+              brandLogoUrl: normalized.brandLogoUrl,
               gender: normalized.gender,
               priceMinor: normalized.price.amountMinor,
               originalPriceMinor: normalized.originalPrice?.amountMinor ?? null,

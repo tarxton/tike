@@ -941,6 +941,8 @@ export interface ProductDetail {
   slug: string;
   model: string;
   brand: string | null;
+  /** The brand's logo in our bucket; null until the image job has stored one. */
+  brandLogoUrl: string | null;
   styleCode: string | null;
   gender: string | null;
   heroImageUrl: string | null;
@@ -984,6 +986,8 @@ export async function productBySlug(slug: string): Promise<ProductDetail | null>
       p.slug            as "slug",
       p.model           as "model",
       b.name            as "brand",
+      ${R2_PUBLIC_BASE ? sql`${R2_PUBLIC_BASE} || '/' || b.logo_key` : sql`null`}
+        as "brandLogoUrl",
       p.style_code      as "styleCode",
       p.gender::text    as "gender",
       coalesce(${cachedImageUrl(sql`p.hero_image_url`)}, p.hero_image_url)
@@ -1053,6 +1057,7 @@ export async function productBySlug(slug: string): Promise<ProductDetail | null>
     slug: String(head.slug),
     model: String(head.model),
     brand: head.brand === null ? null : String(head.brand),
+    brandLogoUrl: head.brandLogoUrl === null ? null : String(head.brandLogoUrl),
     styleCode: head.styleCode === null ? null : String(head.styleCode),
     gender: head.gender === null ? null : String(head.gender),
     heroImageUrl: head.heroImageUrl === null ? null : String(head.heroImageUrl),

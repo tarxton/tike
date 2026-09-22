@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio';
 import type { CheerioAPI } from 'cheerio';
 import { ParseError, UnavailableError } from '../errors';
+import { brandLogoUrl } from './brand-logo';
 import { parsedOfferSchema, type Gender, type ParsedOffer, type RawSize } from '@tike/contracts';
 
 /**
@@ -299,6 +300,10 @@ export function parseNbshop(html: string, url: string): ParsedOffer {
     sku: ld.sku?.trim() || null,
     imageUrl: allImages(ld.image)[0] ?? null,
     imageUrls: allImages(ld.image),
+    // The logo in the product header. Sport Vision and Sport Reality show one; Buzz does not.
+    // Scoped to the header's `.brand-img`, not the `.caption-brand` badges on the
+    // recommendation cards further down, which carry other products' brands.
+    brandLogoUrl: brandLogoUrl($('.brand-img img').first().attr('src'), url),
     priceRaw,
     originalPriceRaw: extractOriginalPrice($, priceRaw),
     currency: currency === 'EUR' ? ('EUR' as const) : ('BAM' as const),

@@ -1,5 +1,6 @@
 import { type Gender, type ParsedOffer, type RawSize, parsedOfferSchema } from '@tike/contracts';
 import { ParseError } from '../errors';
+import { brandLogoUrl } from './brand-logo';
 
 /**
  * Juventa Sport (juventasport.com, Banja Luka).
@@ -33,7 +34,7 @@ interface ProductResponse {
   original_price?: number | string | null;
   hero?: string | null;
   images?: Record<string, string> | string[] | null;
-  brand?: { name?: string | null } | null;
+  brand?: { name?: string | null; logo?: string | null } | null;
   options?: { size?: string | null; eu_size?: string | null; available?: boolean }[] | null;
 }
 
@@ -128,6 +129,8 @@ export function parseJuventa(json: string, url: string): ParsedOffer {
     sku,
     imageUrl: images[0] ?? null,
     imageUrls: images,
+    // The API names the brand's logo on every product, as the storefront's brand pages use it.
+    brandLogoUrl: brandLogoUrl(product.brand?.logo, url),
     priceRaw: price.toFixed(2),
     // Only a genuine markdown; the API repeats the price here on full-price products.
     originalPriceRaw: original !== null && original > price ? original.toFixed(2) : null,

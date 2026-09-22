@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { aliasCase, productCase, sizeCase } from './support/catalogue';
+import { aliasCase, brandLogoCase, productCase, sizeCase } from './support/catalogue';
 import { cards, parsePrice } from './support/page-helpers';
 
 /**
@@ -140,6 +140,27 @@ test.describe('product page', () => {
     await page.goto(`/patika/${product!.slug}`);
     // Either no link (nothing more behind the shelf) or exactly this text, never a number.
     await expect(page.getByText(/Prikaži (sve|svih) \d+ boj/)).toHaveCount(0);
+  });
+
+  test('shows the brand’s logo beside the name, on the right', async ({ page }) => {
+    const found = await brandLogoCase();
+    test.skip(found === null, 'no brand has a stored logo yet');
+    await page.goto(`/patika/${found!.slug}`);
+
+    const logo = page.getByTestId('brand-logo');
+    await expect(logo).toBeVisible();
+    // Loaded from our bucket, not a broken image.
+    const loaded = await logo
+      .locator('img')
+      .evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0);
+    expect(loaded).toBe(true);
+
+    // To the right of the name, level with it, and inside the screen on a phone too.
+    const name = (await page.locator('h1').boundingBox())!;
+    const box = (await logo.boundingBox())!;
+    expect(box.x).toBeGreaterThan(name.x);
+    expect(box.y).toBeLessThan(name.y + name.height);
+    expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
   });
 
   test('an unknown slug is a 404', async ({ page }) => {

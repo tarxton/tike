@@ -177,14 +177,37 @@ export default async function ProductPage({
         </div>
 
         <div>
-          {product.brand ? (
-            <p className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
-              {product.brand}
-            </p>
-          ) : null}
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900">
-            {product.model}
-          </h1>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              {product.brand ? (
+                <p className="text-xs font-semibold tracking-wide text-neutral-500 uppercase">
+                  {product.brand}
+                </p>
+              ) : null}
+              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900">
+                {product.model}
+              </h1>
+            </div>
+            {/*
+             * The brand's mark beside its name, so the page is recognisable at a glance.
+             *
+             * One box for every brand: shops hand logos over in every proportion, and a box
+             * of fixed size keeps a tall Jumpman and a long "New Balance" at the same visual
+             * weight. The name is printed right beside it, so to a screen reader the logo is
+             * decoration and says nothing twice.
+             */}
+            {product.brandLogoUrl ? (
+              <span
+                data-testid="brand-logo"
+                className="flex h-14 w-24 shrink-0 items-center justify-center rounded-lg border border-neutral-200 bg-white p-2 sm:h-16 sm:w-32"
+              >
+                {/* Never larger than it was stored: several shops publish logos about 100px
+                    wide, and stretching one to fill the box only makes it blurry. */}
+                {/* eslint-disable-next-line @next/next/no-img-element -- our own bucket, sized by the box */}
+                <img src={product.brandLogoUrl} alt="" className="max-h-full max-w-full" />
+              </span>
+            ) : null}
+          </div>
 
           {product.styleCode ? (
             <p className="mt-2 text-xs text-neutral-500">
