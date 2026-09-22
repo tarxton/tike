@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ParseError } from '../errors';
+import { ParseError, UnavailableError } from '../errors';
 import { parseOfficeshoes } from './officeshoes';
 
 /**
@@ -79,6 +79,19 @@ describe('parseOfficeshoes', () => {
     expect(() => parseOfficeshoes('<html><body>homepage</body></html>', URLS['01.html'])).toThrow(
       ParseError,
     );
+  });
+
+  it('reads a shoe sold out in every size as sold out, not as broken markup', () => {
+    // Captured 2026-09-22: one of twelve pages still shown on tike as available.
+    const url = 'https://www.officeshoes.ba/cipele-gant-plitke-patike-caffay/73152';
+    expect(() => parseOfficeshoes(fixture('sold-out.html'), url)).toThrow(UnavailableError);
+  });
+
+  it('still calls an empty size list breakage when the page does not say sold out', () => {
+    const url = 'https://www.officeshoes.ba/cipele-gant-plitke-patike-caffay/73152';
+    const html = fixture('sold-out.html').replaceAll('OutOfStock', 'InStock');
+    expect(() => parseOfficeshoes(html, url)).toThrow(ParseError);
+    expect(() => parseOfficeshoes(html, url)).not.toThrow(UnavailableError);
   });
 
   it('never returns an offer with no sizes', () => {

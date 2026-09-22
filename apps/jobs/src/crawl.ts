@@ -49,6 +49,14 @@ const MIN_PAGES_FOR_THRESHOLD = 20;
 const UNREACHABLE_RETIREMENT_THRESHOLD = 0.1;
 
 /**
+ * How many listings missing from discovery a run checks one by one: 5% of what it
+ * crawled, and never fewer than 50. Past that, the sitemap is more likely broken than the
+ * catalogue emptied, and the staleness rule is the safer judge.
+ */
+const VERIFY_SHARE = 0.05;
+const MIN_VERIFY_CAP = 50;
+
+/**
  * How many consecutive successful runs an offer may go unseen before it is treated as
  * gone. Three rather than one because a single crawl can miss a page for reasons that
  * say nothing about stock — a timeout, a shop's own sitemap hiccup, a transient 500.
@@ -260,124 +268,157 @@ await withDb(async (db) => {
   let changed = 0;
   /** Read fine, nothing to sell. Reported, but kept out of the failure budget. */
   let unavailable = 0;
-  /** Of those, how many tike was still showing as in stock. */
-  let soldOutWithdrawn = 0;
+  /** Pages the shop has taken down: a 404 or 410 for a product it used to list. */
+  let gone = 0;
+  /** Of those two, how many tike was still showing as in stock. */
+  let withdrawnCount = 0;
   /** Never fetched, after retries. Not the shop's markup and not ours. */
   const unreachable: { url: string; reason: string }[] = [];
 
-  for (const [i, url] of urls.entries()) {
-    if (!fetcher.isAllowed(url)) {
-      console.warn(`skipped (robots): ${url}`);
-      continue;
-    }
-    try {
-      const html = await fetcher.get(url);
-      const normalized = normalizeOffer(parse(html, url));
-      parsed += 1;
+  /*
+   * Which offer a fetched URL belongs to.
+   *
+   * The URL is the offer's own page everywhere but Juventa, whose data comes from its API;
+   * there the offer is found by the product id in the API address instead.
+   */
+  const offerForUrl = (url: string) => {
+    const apiId = row.platform === 'juventa' ? /\/getProduct\/([^/?#]+)/.exec(url)?.[1] : undefined;
+    return apiId ? sql`external_id = ${decodeURIComponent(apiId)}` : sql`url = ${url}`;
+  };
 
-      if (dryRun) {
-        console.log(
-          `  [${i + 1}/${urls.length}] ${normalized.brand} ${normalized.model} — ` +
-            `${normalized.sizes.length} sizes, ${normalized.sizes.filter((s) => s.inStock).length} in stock`,
-        );
-        continue;
-      }
+  /*
+   * Take an offer off the site now, not three crawls from now.
+   *
+   * The staleness rule exists for pages the crawler could not read, where a missed page
+   * says nothing about stock. These were read, and the shop itself says the shoe is gone,
+   * sold out in every size or the page removed. Waiting out three runs left them on tike
+   * as available for days, sending people to a page with nothing to buy. The row is kept,
+   * as the rule keeps it, so price history and links survive and a return writes it back.
+   */
+  const withdraw = async (url: string): Promise<void> => {
+    if (dryRun) return;
+    const res = await db.execute(sql`
+      update offer set in_stock = false, last_seen_at = now()
+      where shop_id = ${row.id} and in_stock and ${offerForUrl(url)}
+    `);
+    withdrawnCount += res.rowCount ?? 0;
+  };
 
-      // One transaction per offer: the offer and its sizes land together or not at all.
-      await db.transaction(async (tx) => {
-        const [saved] = await tx
-          .insert(offer)
-          .values({
-            shopId: row.id,
-            externalId: normalized.externalId,
+  const save = async (normalized: ReturnType<typeof normalizeOffer>): Promise<void> => {
+    // One transaction per offer: the offer and its sizes land together or not at all.
+    await db.transaction(async (tx) => {
+      const [saved] = await tx
+        .insert(offer)
+        .values({
+          shopId: row.id,
+          externalId: normalized.externalId,
+          url: normalized.url,
+          title: normalized.title,
+          rawBrand: normalized.brand,
+          sku: normalized.sku,
+          imageUrl: normalized.imageUrl,
+          imageUrls: normalized.imageUrls,
+          brandLogoUrl: normalized.brandLogoUrl,
+          gender: normalized.gender,
+          priceMinor: normalized.price.amountMinor,
+          originalPriceMinor: normalized.originalPrice?.amountMinor ?? null,
+          currency: normalized.price.currency,
+          inStock: normalized.inStock,
+        })
+        .onConflictDoUpdate({
+          target: [offer.shopId, offer.externalId],
+          set: {
             url: normalized.url,
             title: normalized.title,
             rawBrand: normalized.brand,
             sku: normalized.sku,
-            imageUrl: normalized.imageUrl,
+            /*
+             * The picture the image job chose, for as long as the shop still lists it.
+             *
+             * The job moves an offer off a scene photograph onto the packshot behind it,
+             * and every crawl used to move it straight back to the shop's first picture.
+             * So each night the job fetched the same rejected photographs again — 29 of
+             * them on 2026-09-17 — and until it ran, those cards were hotlinking the very
+             * scene it had rejected, which for Đak is a broken image.
+             *
+             * Kept only when it *was* a choice: the stored picture differs from the first
+             * candidate the last crawl proposed. A picture that is simply last night's
+             * proposal gives way to tonight's, so a better first picture — an adapter
+             * that learns to read the shop's main image, say — still reaches the card
+             * instead of being frozen out by the rule meant to protect the job's picks.
+             * And a picture the shop no longer lists always gives way.
+             */
+            imageUrl: sql`case
+              when ${offer.imageUrl} is distinct from ${offer.imageUrls}[1]
+                and ${offer.imageUrl} = any(excluded.image_urls)
+                then ${offer.imageUrl}
+              else excluded.image_url
+            end`,
             imageUrls: normalized.imageUrls,
             brandLogoUrl: normalized.brandLogoUrl,
             gender: normalized.gender,
             priceMinor: normalized.price.amountMinor,
             originalPriceMinor: normalized.originalPrice?.amountMinor ?? null,
-            currency: normalized.price.currency,
             inStock: normalized.inStock,
-          })
-          .onConflictDoUpdate({
-            target: [offer.shopId, offer.externalId],
-            set: {
-              url: normalized.url,
-              title: normalized.title,
-              rawBrand: normalized.brand,
-              sku: normalized.sku,
-              /*
-               * The picture the image job chose, for as long as the shop still lists it.
-               *
-               * The job moves an offer off a scene photograph onto the packshot behind it,
-               * and every crawl used to move it straight back to the shop's first picture.
-               * So each night the job fetched the same rejected photographs again — 29 of
-               * them on 2026-09-17 — and until it ran, those cards were hotlinking the very
-               * scene it had rejected, which for Đak is a broken image.
-               *
-               * Kept only when it *was* a choice: the stored picture differs from the first
-               * candidate the last crawl proposed. A picture that is simply last night's
-               * proposal gives way to tonight's, so a better first picture — an adapter
-               * that learns to read the shop's main image, say — still reaches the card
-               * instead of being frozen out by the rule meant to protect the job's picks.
-               * And a picture the shop no longer lists always gives way.
-               */
-              imageUrl: sql`case
-                when ${offer.imageUrl} is distinct from ${offer.imageUrls}[1]
-                  and ${offer.imageUrl} = any(excluded.image_urls)
-                  then ${offer.imageUrl}
-                else excluded.image_url
-              end`,
-              imageUrls: normalized.imageUrls,
-              brandLogoUrl: normalized.brandLogoUrl,
-              gender: normalized.gender,
-              priceMinor: normalized.price.amountMinor,
-              originalPriceMinor: normalized.originalPrice?.amountMinor ?? null,
-              inStock: normalized.inStock,
-              lastSeenAt: sql`now()`,
-            },
-          })
-          .returning({ id: offer.id, priceMinor: offer.priceMinor });
+            lastSeenAt: sql`now()`,
+          },
+        })
+        .returning({ id: offer.id, priceMinor: offer.priceMinor });
 
-        const offerId = saved!.id;
+      const offerId = saved!.id;
 
-        // Sizes are replaced wholesale: the page is the source of truth for what the
-        // shop sells today, and a size that disappeared should not linger.
-        await tx.delete(offerSize).where(eq(offerSize.offerId, offerId));
-        await tx.insert(offerSize).values(
-          normalized.sizes.map((s) => ({
-            offerId,
-            sizeRaw: s.sizeRaw,
-            sizeEu: s.sizeEu,
-            sizeUs: s.sizeUs,
-            sizeUk: s.sizeUk,
-            inStock: s.inStock,
-            // Adapters have always extracted these; the write dropped them, which left
-            // matching tier 1 with nothing to compare and silently unreachable.
-            gtin: s.gtin,
-          })),
+      // Sizes are replaced wholesale: the page is the source of truth for what the
+      // shop sells today, and a size that disappeared should not linger.
+      await tx.delete(offerSize).where(eq(offerSize.offerId, offerId));
+      await tx.insert(offerSize).values(
+        normalized.sizes.map((s) => ({
+          offerId,
+          sizeRaw: s.sizeRaw,
+          sizeEu: s.sizeEu,
+          sizeUs: s.sizeUs,
+          sizeUk: s.sizeUk,
+          inStock: s.inStock,
+          // Adapters have always extracted these; the write dropped them, which left
+          // matching tier 1 with nothing to compare and silently unreachable.
+          gtin: s.gtin,
+        })),
+      );
+
+      // Price history: only append when the price actually moved.
+      const [last] = await tx
+        .select({ priceMinor: pricePoint.priceMinor })
+        .from(pricePoint)
+        .where(eq(pricePoint.offerId, offerId))
+        .orderBy(sql`${pricePoint.recordedAt} desc`)
+        .limit(1);
+      if (!last || last.priceMinor !== normalized.price.amountMinor) {
+        await tx.insert(pricePoint).values({
+          offerId,
+          priceMinor: normalized.price.amountMinor,
+          currency: normalized.price.currency,
+        });
+      }
+    });
+  };
+
+  type Outcome = 'written' | 'unavailable' | 'gone' | 'unreachable' | 'failed';
+
+  /** Fetch, read and store one product page, and say what became of it. */
+  const processPage = async (url: string, label: string): Promise<Outcome> => {
+    try {
+      const html = await fetcher.get(url);
+      const normalized = normalizeOffer(parse(html, url));
+      parsed += 1;
+      if (dryRun) {
+        console.log(
+          `  ${label} ${normalized.brand} ${normalized.model} — ` +
+            `${normalized.sizes.length} sizes, ${normalized.sizes.filter((s) => s.inStock).length} in stock`,
         );
-
-        // Price history: only append when the price actually moved.
-        const [last] = await tx
-          .select({ priceMinor: pricePoint.priceMinor })
-          .from(pricePoint)
-          .where(eq(pricePoint.offerId, offerId))
-          .orderBy(sql`${pricePoint.recordedAt} desc`)
-          .limit(1);
-        if (!last || last.priceMinor !== normalized.price.amountMinor) {
-          await tx.insert(pricePoint).values({
-            offerId,
-            priceMinor: normalized.price.amountMinor,
-            currency: normalized.price.currency,
-          });
-        }
-      });
+        return 'written';
+      }
+      await save(normalized);
       changed += 1;
+      return 'written';
     } catch (err) {
       if (err instanceof ForbiddenError) throw err; // stop the whole run
       // A product the shop has sold out of is not a failure of any kind. Magento lists
@@ -385,23 +426,15 @@ await withDb(async (db) => {
       // these would hold that shop permanently over the breaker while its markup is fine.
       if (err instanceof UnavailableError) {
         unavailable += 1;
-        /*
-         * And it comes off the site now, not three crawls from now.
-         *
-         * The staleness rule exists for pages the crawler could not read, where a missed
-         * page says nothing about stock. This page was read, and the shop itself says the
-         * shoe is gone: waiting out three runs left it on tike as available for days,
-         * sending people to a page with nothing to buy. The row is kept, as the rule keeps
-         * it, so its price history and links survive and a restock simply writes it back.
-         */
-        if (!dryRun) {
-          const withdrawn = await db.execute(sql`
-            update offer set in_stock = false, last_seen_at = now()
-            where shop_id = ${row.id} and url = ${url} and in_stock
-          `);
-          soldOutWithdrawn += withdrawn.rowCount ?? 0;
-        }
-        continue;
+        await withdraw(url);
+        return 'unavailable';
+      }
+      // A page the shop has removed answers 404, and that is an answer, not an outage:
+      // counted as unreachable it waited out the staleness rule while still listed.
+      if (err instanceof FetchError && (err.status === 404 || err.status === 410)) {
+        gone += 1;
+        await withdraw(url);
+        return 'gone';
       }
       // One unreachable page costs that page, not the thousands still unvisited. Counted,
       // because a run that could not fetch much of the catalogue has not seen it, and must
@@ -409,7 +442,7 @@ await withDb(async (db) => {
       if (err instanceof FetchError) {
         unreachable.push({ url, reason: err.message.slice(0, 200) });
         console.warn(`  unreachable: ${url} — ${err.message.slice(0, 120)}`);
-        continue;
+        return 'unreachable';
       }
       // Only bad *data* counts toward the failure budget. A database or network error
       // is a bug or an outage, not a shop changing its markup, and hiding it in the
@@ -418,7 +451,16 @@ await withDb(async (db) => {
       if (!isDataProblem) throw err;
       failures.push({ url, reason: err.message.slice(0, 200) });
       console.warn(`  parse failure: ${url} — ${err.message.slice(0, 120)}`);
+      return 'failed';
     }
+  };
+
+  for (const [i, url] of urls.entries()) {
+    if (!fetcher.isAllowed(url)) {
+      console.warn(`skipped (robots): ${url}`);
+      continue;
+    }
+    await processPage(url, `[${i + 1}/${urls.length}]`);
   }
 
   const attempted = parsed + failures.length;
@@ -449,7 +491,8 @@ await withDb(async (db) => {
 
   console.log(
     `\nrun ${runId}: parsed=${parsed} failed=${failures.length} written=${changed} ` +
-      `sold-out=${unavailable} withdrawn=${soldOutWithdrawn} unreachable=${unreachable.length} ` +
+      `sold-out=${unavailable} gone=${gone} withdrawn=${withdrawnCount} ` +
+      `unreachable=${unreachable.length} ` +
       `failure-rate=${(failureRate * 100).toFixed(1)}%`,
   );
 
@@ -484,6 +527,51 @@ await withDb(async (db) => {
     );
     for (const u of unreachable.slice(0, 5)) console.warn(`  ${u.url}: ${u.reason}`);
     return;
+  }
+
+  /*
+   * Listings the shop stopped publishing, checked rather than waited out.
+   *
+   * A product that drops out of the sitemap is usually gone: Đak's EA7 "Black&White
+   * Vintage" left its sitemap on 2026-09-18 and its page answered 404, yet tike kept it as
+   * available until three more crawls had missed it, which a failed night stretched to
+   * five days. So each listing this run did not reach is asked for directly, once: a page
+   * that is gone or sold out comes off now, one that still sells is simply updated, and
+   * anything inconclusive is left to the staleness rule as before.
+   *
+   * Bounded, because a sitemap that suddenly lost half the catalogue is more likely broken
+   * than emptied, and re-fetching everything it dropped would be a second crawl in disguise.
+   */
+  const attemptedUrls = new Set(urls);
+  const missing = (
+    await db.execute(sql`
+      select url, external_id as "externalId"
+      from offer
+      where shop_id = ${row.id} and in_stock
+        and last_seen_at < (select started_at from crawl_run where id = ${runId})
+    `)
+  ).rows as { url: string; externalId: string }[];
+  const toCheck = missing
+    .map((o) =>
+      row.platform === 'juventa' ? juventaProductApiUrl(row.baseUrl, o.externalId) : o.url,
+    )
+    .filter((url) => !attemptedUrls.has(url) && fetcher.isAllowed(url));
+  const verifyCap = Math.max(MIN_VERIFY_CAP, Math.ceil(urls.length * VERIFY_SHARE));
+  if (toCheck.length > verifyCap) {
+    console.warn(
+      `${toCheck.length} listings missing from discovery, more than ${verifyCap}: ` +
+        `not checking them one by one; the staleness rule decides`,
+    );
+  } else if (toCheck.length > 0) {
+    const outcomes = { written: 0, unavailable: 0, gone: 0, unreachable: 0, failed: 0 };
+    for (const [i, url] of toCheck.entries()) {
+      outcomes[await processPage(url, `[check ${i + 1}/${toCheck.length}]`)] += 1;
+    }
+    console.log(
+      `checked ${toCheck.length} listings missing from discovery: still listed=${outcomes.written} ` +
+        `sold-out=${outcomes.unavailable} gone=${outcomes.gone} ` +
+        `inconclusive=${outcomes.unreachable + outcomes.failed}`,
+    );
   }
 
   const retired = await retireUnseenOffers(db, row.id);

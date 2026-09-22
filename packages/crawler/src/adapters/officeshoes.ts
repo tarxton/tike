@@ -1,7 +1,7 @@
 import * as cheerio from 'cheerio';
 import type { CheerioAPI } from 'cheerio';
 import { type ParsedOffer, type RawSize, parsedOfferSchema } from '@tike/contracts';
-import { ParseError } from '../errors';
+import { ParseError, UnavailableError } from '../errors';
 import { brandLogoUrl } from './brand-logo';
 
 /**
@@ -77,6 +77,20 @@ export function parseOfficeshoes(html: string, url: string): ParsedOffer {
 
   const sizes = extractSizes($, scope);
   if (sizes.length === 0) {
+    /*
+     * Sold out, when the shop says so itself.
+     *
+     * Only in-stock sizes are rendered, so a shoe sold out in every size arrives with an
+     * empty size list, and the page adds schema.org `OutOfStock` (and "Rasprodato!"). A
+     * crawl on 2026-09-22 found twelve such pages still shown on tike as available. Both
+     * signs are required: an empty list with no such claim is what a moved selector looks
+     * like, and stays a parse failure so the breaker still sees it.
+     */
+    const availability = scope.find('[itemprop="availability"]').first();
+    const claim = availability.attr('href') ?? availability.attr('content') ?? '';
+    if (/OutOfStock$/i.test(claim.trim()) && scope.find('ul.sizes').length > 0) {
+      throw new UnavailableError('product is sold out in every size', url);
+    }
     // Contract: an offer with no sizes is a parse failure, never an out-of-stock shoe.
     throw new ParseError(`no sizes found`, url);
   }
