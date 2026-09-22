@@ -1,4 +1,5 @@
 import type { ParsedOffer } from '@tike/contracts';
+import { brandSpellings, canonicalBrand } from './brand';
 import { parsePrice, type Currency, type Money } from './money';
 import { convertSize, parseEuSize, type Gender } from './size';
 import { normalizeForSearch, slugify } from './text';
@@ -110,12 +111,16 @@ export function cleanModel(title: string, brand: string | null): string {
  * prefix every shop puts there.
  */
 function stripLeadingBrand(model: string, brand: string | null): string {
-  if (!brand) return model;
-  const leading = new RegExp(`^${escapeRegExp(brand)}(?!\\p{L})`, 'iu');
+  // Every spelling of the brand, longest first, so "361 DEGREES" comes off whole before
+  // "361" could take only its first word.
+  const leading = brandSpellings(brand).map(
+    (name) => new RegExp(`^${escapeRegExp(name)}(?!\\p{L})`, 'iu'),
+  );
+  if (leading.length === 0) return model;
   let out = model;
   for (let seen = ''; out !== seen;) {
     seen = out;
-    out = collapse(out.replace(leading, ''));
+    for (const pattern of leading) out = collapse(out.replace(pattern, ''));
   }
   return out;
 }
@@ -236,15 +241,18 @@ export function normalizeOffer(parsed: ParsedOffer): NormalizedOffer {
   const merged = mergeDuplicateEuSizes(sizes);
 
   const model = cleanModel(parsed.title, parsed.brand);
-  const searchDoc = normalizeForSearch([parsed.brand, model, parsed.sku].filter(Boolean).join(' '));
+  // Stored under one name per brand, so every shop's listings of it meet in matching and
+  // in the brand filter. See `canonicalBrand`.
+  const brand = canonicalBrand(parsed.brand);
+  const searchDoc = normalizeForSearch([brand, model, parsed.sku].filter(Boolean).join(' '));
 
   return {
     externalId: parsed.externalId,
     url: parsed.url,
     title: parsed.title,
-    brand: parsed.brand,
+    brand,
     model,
-    slug: slugify([parsed.brand, model].filter(Boolean).join(' ')),
+    slug: slugify([brand, model].filter(Boolean).join(' ')),
     sku: parsed.sku,
     imageUrl: parsed.imageUrl,
     imageUrls: parsed.imageUrls,
