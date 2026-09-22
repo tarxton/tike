@@ -32,6 +32,8 @@ export interface NormalizedOffer {
   imageUrl: string | null;
   /** Every picture the shop offered, so the image job can pick the packshot. */
   imageUrls: string[];
+  /** The brand's logo as this shop shows it, a candidate for the brand's own. */
+  brandLogoUrl: string | null;
   price: Money;
   /** Pre-sale price, only set when the shop is genuinely discounting. */
   originalPrice: Money | null;
@@ -246,6 +248,7 @@ export function normalizeOffer(parsed: ParsedOffer): NormalizedOffer {
     sku: parsed.sku,
     imageUrl: parsed.imageUrl,
     imageUrls: parsed.imageUrls,
+    brandLogoUrl: parsed.brandLogoUrl,
     price,
     originalPrice,
     gender: parsed.gender,

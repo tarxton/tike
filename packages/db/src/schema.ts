@@ -139,6 +139,17 @@ export const brand = pgTable(
     name: text('name').notNull(),
     /** Spellings seen in the wild ("adidas Originals", "ADIDAS") mapped to this brand. */
     aliases: text('aliases').array().notNull().default([]),
+    /**
+     * The brand's logo in our own bucket, once the image job has stored one.
+     *
+     * Kept here rather than in `image_cache`: that table is the product-photo pipeline, and
+     * both the re-render job and the rendition sweep treat every row in it as a shoe.
+     */
+    logoKey: text('logo_key'),
+    /** The shop URL the stored logo was taken from. */
+    logoSourceUrl: text('logo_source_url'),
+    /** Candidate URLs that failed or would not show on white, so no run asks again. */
+    logoRejected: text('logo_rejected').array().notNull().default([]),
   },
   (t) => [uniqueIndex('brand_slug_key').on(t.slug)],
 );
@@ -200,6 +211,8 @@ export const offer = pgTable(
      * and that job promotes whichever one actually looks like a product.
      */
     imageUrls: text('image_urls').array().notNull().default([]),
+    /** The brand logo this shop's page shows, a candidate for the brand's own. */
+    brandLogoUrl: text('brand_logo_url'),
     /** Guards matching: a kids shoe must never merge into its adult namesake. */
     gender: genderEnum('gender'),
     priceMinor: integer('price_minor').notNull(),

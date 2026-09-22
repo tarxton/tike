@@ -21,6 +21,7 @@ const offer = (over: Partial<ParsedOffer> = {}): ParsedOffer => ({
   sku: 'IM4414-200',
   imageUrl: null,
   imageUrls: [],
+  brandLogoUrl: null,
   priceRaw: '259.00',
   originalPriceRaw: null,
   currency: 'BAM',

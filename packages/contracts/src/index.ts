@@ -163,6 +163,14 @@ export const parsedOfferSchema = z.object({
    * and leaves the decision to it.
    */
   imageUrls: z.array(z.url()).default([]),
+  /**
+   * The brand's logo as this shop shows it on the product page, when it shows one.
+   *
+   * Brands are shared across shops, so this is a candidate rather than a fact about the
+   * offer: the image job picks one per brand from everything the shops have offered and
+   * stores it. Null when the page carries no logo or only a placeholder.
+   */
+  brandLogoUrl: z.url().nullable().default(null),
   priceRaw: z.string().min(1),
   originalPriceRaw: z.string().nullable(),
   currency: z.enum(['BAM', 'EUR']).default('BAM'),

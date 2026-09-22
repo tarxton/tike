@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import type { CheerioAPI } from 'cheerio';
 import { parsedOfferSchema, type Gender, type ParsedOffer, type RawSize } from '@tike/contracts';
 import { ParseError, UnavailableError } from '../errors';
+import { brandLogoUrl } from './brand-logo';
 
 /**
  * Magento 2 adapter.
@@ -256,6 +257,11 @@ export function parseMagento2(html: string, url: string): ParsedOffer {
     sku: extractSlugStyleCode(url),
     imageUrl: extractImages($, html)[0] ?? null,
     imageUrls: extractImages($, html),
+    brandLogoUrl: extractBrandLogo(
+      $,
+      url,
+      pageAttribute(html, 'productBrand') ?? extractBrand(title),
+    ),
     priceRaw: finalPrice.toFixed(2),
     // Only a genuine markdown. Magento repeats the final price in oldPrice on full-price
     // products, which would otherwise put the whole shop on sale at 0% off.
@@ -270,6 +276,32 @@ export function parseMagento2(html: string, url: string): ParsedOffer {
     throw new ParseError(`offer failed contract validation: ${result.error.message}`, url);
   }
   return result.data;
+}
+
+/**
+ * The brand's logo from the shop's brand block (Amasty's `.amshopby-option-link`).
+ *
+ * Only when its label names this product's brand. The block is a widget, and a widget can
+ * be placed anywhere a theme likes; a logo that says another brand is not this one's.
+ */
+function extractBrandLogo($: CheerioAPI, url: string, brand: string | null): string | null {
+  if (!brand) return null;
+  const want = brand.trim().toLowerCase();
+  const img = $('.amshopby-option-link img')
+    .filter(
+      (_, el) => ($(el).attr('alt') ?? $(el).attr('title') ?? '').trim().toLowerCase() === want,
+    )
+    .first();
+  // The slider serves a 120x45 cut ("…/cache/amasty/…/slider/resized/120x45/converse.png")
+  // of an upload that sits under the same name without the cache segments, at 300px.
+  // Checked against Đak's Converse before relying on it.
+  const original = img
+    .attr('src')
+    ?.replace(
+      /\/media\/images\/cache\/(amasty\/shopby\/option_images\/slider\/)resized\/\d+x\d+\//,
+      '/media/$1',
+    );
+  return brandLogoUrl(original, url);
 }
 
 /**

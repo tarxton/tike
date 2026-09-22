@@ -41,6 +41,8 @@ export function sanitizeOfficeshoesFixture(html) {
   const sizeList = scope.find('ul.sizes').first();
   sizeList.find('li[rel]').removeAttr('rel');
   const sizes = sizeList.toString() ?? '';
+  // The brand's logo link sits beside the Product scope, not inside it.
+  const brandLogo = $('a.brandlogo').first().toString() ?? '';
 
   return [
     '<!doctype html>',
@@ -55,6 +57,7 @@ export function sanitizeOfficeshoesFixture(html) {
     price,
     sizes,
     '</section>',
+    brandLogo,
     '</body>',
     '</html>',
     '',
@@ -87,6 +90,8 @@ export function sanitizeFixture(html) {
   const breadcrumb = $('.breadcrumb').first().toString() ?? '';
   const sizes = $('.product-attributes-wrapper').first().toString() ?? '';
   const heading = $('h1').first().toString() ?? '';
+  // The brand logo in the product header, for the brand-logo field.
+  const brandImg = $('.brand-img').first().toString() ?? '';
   // The disabled "Proizvod više nije dostupan" button a sold-out page shows in place of
   // the basket: with no Product block left, it is how the parser knows the page is one.
   const soldOut =
@@ -104,6 +109,7 @@ export function sanitizeFixture(html) {
     '</head>',
     '<body>',
     heading,
+    brandImg,
     breadcrumb,
     sizes,
     soldOut,
@@ -206,8 +212,15 @@ export function sanitizeMagento2Fixture(html) {
     .filter(Boolean)
     .join('\n');
 
+  // Amasty's brand block, reduced to its first image: the logo and the label it carries.
+  const brandImg = $('.amshopby-option-link img').first();
+  const brandBlock = brandImg.length
+    ? `<div class="amshopby-option-link"><img src="${brandImg.attr('src') ?? ''}" alt="${brandImg.attr('alt') ?? ''}"></div>`
+    : '';
+
   return [
     heading,
+    brandBlock,
     shopAttributes ? `<script>\n${shopAttributes}\n</script>` : '',
     `<script type="text/x-magento-init">${JSON.stringify(swatch)}</script>`,
     galleryBlock,
@@ -232,7 +245,7 @@ export function sanitizeJuventaFixture(json) {
     original_price: p.original_price,
     hero: p.hero,
     images: p.images,
-    brand: p.brand ? { name: p.brand.name } : null,
+    brand: p.brand ? { name: p.brand.name, logo: p.brand.logo ?? null } : null,
     options: (p.options ?? []).map((o) => ({
       size: o.size,
       eu_size: o.eu_size,

@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import type { CheerioAPI } from 'cheerio';
 import { type ParsedOffer, type RawSize, parsedOfferSchema } from '@tike/contracts';
 import { ParseError } from '../errors';
+import { brandLogoUrl } from './brand-logo';
 
 /**
  * Office Shoes.
@@ -88,6 +89,8 @@ export function parseOfficeshoes(html: string, url: string): ParsedOffer {
     sku: prop('sku'),
     imageUrl: prop('image'),
     imageUrls: [prop('image')].filter((v): v is string => Boolean(v)),
+    // The brand's own logo, linked beside the product ("cdn.officeshoes.ws/…/brandlogos/…").
+    brandLogoUrl: brandLogoUrl($('a.brandlogo img').first().attr('src'), url),
     priceRaw,
     originalPriceRaw: extractOriginalPrice(scope),
     currency: prop('priceCurrency') === 'EUR' ? 'EUR' : 'BAM',

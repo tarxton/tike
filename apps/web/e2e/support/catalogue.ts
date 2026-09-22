@@ -68,6 +68,7 @@ let cache: {
   kidsOnly?: Promise<{ key: string; model: string } | null>;
   nearOnly?: Promise<{ slug: string; familyKey: string; size: number; nearSize: number } | null>;
   exactVariation?: Promise<string | null>;
+  brandLogo?: Promise<{ slug: string; brand: string } | null>;
 } = { offers: {} };
 
 /** Only useful to a test that deliberately wants a second look at the catalogue. */
@@ -360,6 +361,23 @@ export function exactAndVariationCase(): Promise<string | null> {
     return rows[0] && rows[0].variations > 0 ? rows[0].model : null;
   })();
   return cache.exactVariation;
+}
+
+/** A product on sale somewhere whose brand has a stored logo. */
+export function brandLogoCase(): Promise<{ slug: string; brand: string } | null> {
+  cache.brandLogo ??= (async () => {
+    const rows = (await sql()`
+      select p.slug, b.name as brand
+      from product p
+      join brand b on b.id = p.brand_id and b.logo_key is not null
+      join offer o on o.product_id = p.id and o.in_stock
+      join shop s on s.id = o.shop_id and s.active
+      order by p.id
+      limit 1
+    `) as { slug: string; brand: string }[];
+    return rows[0] ?? null;
+  })();
+  return cache.brandLogo;
 }
 
 /** A slug a product has outgrown, which must still resolve. */
