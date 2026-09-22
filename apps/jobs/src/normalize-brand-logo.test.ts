@@ -94,6 +94,18 @@ describe('normalizeBrandLogo', () => {
   });
 });
 
+describe('normalizeBrandLogo on a small SVG', () => {
+  it('draws it at the box’s size rather than its own 120px', async () => {
+    const svg = Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="45" viewBox="0 0 120 45">' +
+        '<rect x="0" y="0" width="120" height="45" fill="#111"/></svg>',
+    );
+    const out = await normalizeBrandLogo(svg);
+    expect(out.height).toBe(LOGO_MAX_HEIGHT);
+    expect(out.width).toBeGreaterThan(400);
+  });
+});
+
 describe('brandLogoKey', () => {
   it('lives under brands/, where the photo sweep and re-render never look', () => {
     expect(brandLogoKey('nike', 'https://x.test/nike.png')).toMatch(

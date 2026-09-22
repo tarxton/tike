@@ -30,9 +30,7 @@ export interface LogoRendition {
 }
 
 export async function normalizeBrandLogo(input: Buffer): Promise<LogoRendition> {
-  // SVGs rasterise at the density they are opened with; the default draws a small logo
-  // blurry once it is scaled to the box.
-  const opened = sharp(input, { density: 384 }).ensureAlpha();
+  const opened = sharp(input, { density: await svgDensity(input) }).ensureAlpha();
 
   let trimmed: Buffer;
   try {
@@ -56,6 +54,21 @@ export async function normalizeBrandLogo(input: Buffer): Promise<LogoRendition> 
     .toBuffer({ resolveWithObject: true });
 
   return { data, width: info.width, height: info.height, bytes: info.size };
+}
+
+/**
+ * The density to rasterise an SVG at: enough for twice the box, and no more.
+ *
+ * An SVG draws at 72 dpi by default, which leaves a small one blurry once scaled up to the
+ * box. A fixed high density was the first answer and the wrong one: it turned a 1200px-wide
+ * logo into a 6400px raster, only to shrink it to 480, and timed out on a CI runner.
+ * Raster formats ignore density, so they keep sharp's default.
+ */
+async function svgDensity(input: Buffer): Promise<number> {
+  const meta = await sharp(input).metadata();
+  if (meta.format !== 'svg' || !meta.width || !meta.height) return 72;
+  const scale = Math.min((2 * LOGO_MAX_WIDTH) / meta.width, (2 * LOGO_MAX_HEIGHT) / meta.height);
+  return Math.min(1200, Math.max(72, 72 * scale));
 }
 
 /**
