@@ -194,6 +194,10 @@ export function ModelSearch({
 
   const choose = (s: ModelSuggestion) => {
     setOpen(false);
+    // Filling the box below is a change of `value`, and the suggestion effect runs on
+    // every change once someone has typed: it fetched suggestions for the chosen name and
+    // opened the list straight back over the pick. Only typing reopens it now.
+    typed.current = false;
     /*
      * Put the chosen name in the box.
      *

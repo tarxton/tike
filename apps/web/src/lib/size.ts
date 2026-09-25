@@ -29,6 +29,12 @@ export async function applyFilters(formData: FormData): Promise<void> {
   const model = String(formData.get('model') ?? '').trim();
   const brand = String(formData.get('brend') ?? '').trim();
   const showKids = formData.get('djecije') === '1';
+  // Filters the form has no field for, carried as hidden inputs so a search keeps them.
+  // Passed through as written: the results page validates each one when it reads the URL.
+  const sort = String(formData.get('sort') ?? '').trim();
+  const onSale = formData.get('akcija') === '1';
+  const shops = String(formData.get('prodavnica') ?? '').trim();
+  const genders = String(formData.get('pol') ?? '').trim();
 
   const params = new URLSearchParams();
   if (sizes.length > 0) params.set('velicina', sizes.join(','));
@@ -36,6 +42,10 @@ export async function applyFilters(formData: FormData): Promise<void> {
   else if (query) params.set('q', query);
   if (brand) params.set('brend', brand);
   if (showKids) params.set('djecije', '1');
+  if (sort) params.set('sort', sort);
+  if (onSale) params.set('akcija', '1');
+  if (shops) params.set('prodavnica', shops);
+  if (genders) params.set('pol', genders);
 
   const qs = params.toString();
   redirect(qs ? `/patike?${qs}` : '/patike');

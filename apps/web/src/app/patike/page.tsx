@@ -16,6 +16,7 @@ import { Filters } from '@/components/filters';
 import { OfferCard } from '@/components/offer-card';
 import { Pager } from '@/components/pager';
 import { SortMenu } from '@/components/sort-menu';
+import { KeepTickedSizes } from '@/components/keep-ticked-sizes';
 import { FilterBar, GENDERS } from '@/components/filter-bar';
 import { formatCount, formatSize, pluralResults, showingRange, t } from '@/lib/messages';
 import { RESULTS_ANCHOR } from '@/lib/anchors';
@@ -217,6 +218,7 @@ export default async function Results({
   return (
     <main className="mx-auto max-w-6xl px-5 py-8">
       <ScrollMemory />
+      <KeepTickedSizes />
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <Link href="/" className="text-xl font-semibold tracking-tight text-neutral-900">
           {t.siteName}
@@ -252,6 +254,7 @@ export default async function Results({
           }
           applyModelOnPick
           brands={brands}
+          keep={{ sort, onSale, shops, genders }}
           compact
         />
       </section>
@@ -279,6 +282,7 @@ export default async function Results({
               genders,
             })}
             scroll={false}
+            data-keep-sizes
             className="ml-1 underline underline-offset-4 hover:text-neutral-900"
           >
             {t.clearModel}
@@ -313,6 +317,7 @@ export default async function Results({
               genders,
             })}
             scroll={false}
+            data-keep-sizes
             className="ml-1 underline underline-offset-4 hover:text-neutral-900"
           >
             {t.clearSearch}
@@ -635,6 +640,7 @@ function FilterChip({
       href={href}
       // Stay where the reader is; see the note on the filter-bar chip.
       scroll={false}
+      data-keep-sizes
       className={[
         // A brand name never breaks across lines: "Sergio Tacchini" wrapping turns one
         // chip into a three-line lozenge and, with the row stretching to match, drags

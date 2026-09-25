@@ -99,6 +99,8 @@ function Chip({
       // phone the chips sit a screen and a half down, so the default scroll-to-top meant
       // every refinement cost a scroll back to where you already were.
       scroll={false}
+      // Follows the sizes ticked on screen, not only the ones in the URL; see KeepTickedSizes.
+      data-keep-sizes
       aria-pressed={active}
       className={[
         'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm whitespace-nowrap transition',
