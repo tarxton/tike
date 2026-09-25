@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import {
   deleteSearchMisses,
   exactAndVariationCase,
@@ -182,5 +182,58 @@ test.describe('filters', () => {
     await page.goto('/patike?strana=9999');
     await expect(page.getByText('Nema rezultata na toj stranici.')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Nazad na prvu stranicu' })).toBeVisible();
+  });
+});
+
+/** Tick one more base size than the page was loaded with, and return its value. */
+async function tickAnotherSize(page: Page): Promise<string> {
+  const label = page
+    .locator('label[data-base]:has(input[name="velicina"]:not(:disabled):not(:checked))')
+    .first();
+  const value = (await label.locator('input').getAttribute('value'))!;
+  await label.click();
+  // By value: the locator above would re-resolve to the next unticked size.
+  await expect(page.locator(`input[name="velicina"][value="${value}"]`)).toBeChecked();
+  return value;
+}
+
+const sizesIn = (url: string) =>
+  (new URL(url).searchParams.get('velicina') ?? '').split(',').filter(Boolean);
+
+test.describe('a size ticked but not yet searched', () => {
+  test('is used by the next filter chosen', async ({ page }) => {
+    const { size } = await sizeCase();
+    await page.goto(`/patike?velicina=${size}`);
+    const extra = await tickAnotherSize(page);
+
+    // Ticking alone does not search, and should not; the next filter should see it.
+    await page.getByRole('link', { name: 'Muške', exact: true }).first().click();
+    await expect(page).toHaveURL(/pol=men/);
+    expect(sizesIn(page.url()).sort()).toEqual([String(size), extra].sort());
+  });
+
+  test('is used by the order chosen, and the menu still closes', async ({ page }) => {
+    const { size } = await sizeCase();
+    await page.goto(`/patike?velicina=${size}`);
+    const extra = await tickAnotherSize(page);
+
+    await page.getByText('Sortiraj:').click();
+    const option = page.getByRole('link', { name: 'Najjeftinije' });
+    await option.click();
+    await expect(page).toHaveURL(/sort=najjeftinije/);
+    expect(sizesIn(page.url())).toContain(extra);
+    await expect(option).toBeHidden();
+  });
+
+  test('searching again keeps the order and the other filters', async ({ page }) => {
+    const { size } = await sizeCase();
+    await page.goto(`/patike?velicina=${size}&sort=najjeftinije&pol=men`);
+    const extra = await tickAnotherSize(page);
+
+    await page.getByRole('button', { name: 'Pretraži' }).click();
+    await expect(page).toHaveURL(new RegExp(`velicina=[^&]*${extra}`));
+    const url = new URL(page.url());
+    expect(url.searchParams.get('sort')).toBe('najjeftinije');
+    expect(url.searchParams.get('pol')).toBe('men');
   });
 });

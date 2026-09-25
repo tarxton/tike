@@ -102,6 +102,7 @@ export function SortMenu({
               onClick={() => setOpen(false)}
               // Reordering the same results is not a reason to move the reader.
               scroll={false}
+              data-keep-sizes
               aria-current={active ? 'true' : undefined}
               className={[
                 'block rounded-md px-3 py-2 text-sm',

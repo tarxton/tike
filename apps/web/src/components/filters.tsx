@@ -29,6 +29,7 @@ export function Filters({
   brands = [],
   compact = false,
   returnTo = '/patike',
+  keep,
 }: {
   sizes: number[];
   selected: number[];
@@ -44,11 +45,27 @@ export function Filters({
   compact?: boolean;
   /** Where "clear" returns to. On the home page, clearing must not run a search. */
   returnTo?: string;
+  /**
+   * The filters in force that the form has no field for, so a search keeps them.
+   *
+   * The form sends sizes, text and model; order, gender, shop and sale live in the URL.
+   * Rebuilt from the form alone, "Pretraži" reset the sort to its default and dropped the
+   * rest, so re-searching with another size meant choosing them all again.
+   */
+  keep?: { sort?: string; onSale?: boolean; shops?: string[]; genders?: string[] };
 }) {
   return (
     <form action={applyFilters} className={compact ? 'space-y-3' : 'space-y-5'}>
       {showKids ? <input type="hidden" name="djecije" value="1" /> : null}
       {brands.length > 0 ? <input type="hidden" name="brend" value={brands.join(',')} /> : null}
+      {keep?.sort ? <input type="hidden" name="sort" value={keep.sort} /> : null}
+      {keep?.onSale ? <input type="hidden" name="akcija" value="1" /> : null}
+      {keep?.shops && keep.shops.length > 0 ? (
+        <input type="hidden" name="prodavnica" value={keep.shops.join(',')} />
+      ) : null}
+      {keep?.genders && keep.genders.length > 0 ? (
+        <input type="hidden" name="pol" value={keep.genders.join(',')} />
+      ) : null}
 
       {/*
        * Keyed on what it was built from: its text is state, and a client navigation to

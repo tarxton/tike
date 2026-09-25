@@ -73,8 +73,11 @@ test.describe('model typeahead', () => {
     await options.first().click();
 
     await expect(page.getByRole('combobox', { name: 'Pretraži' })).toHaveValue(name);
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(800);
     expect(new URL(page.url()).pathname, 'picking a model left the home page').toBe('/');
+    // Filling the box with the chosen name used to count as typing: the list fetched
+    // suggestions for that name and opened straight back over the pick.
+    await expect(page.getByRole('listbox')).toBeHidden();
 
     await page.locator(`label:has(input[name="velicina"][value="${size}"])`).click();
     await page.getByRole('button', { name: 'Pretraži' }).click();
