@@ -16,8 +16,7 @@
     "@tike/contracts": "workspace:*",
     "@tike/core": "workspace:*",
     "cheerio": "^1.1.2",
-    "robots-parser": "^3.0.1",
-    "undici": "^8.10.0"
+    "robots-parser": "^3.0.1"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
