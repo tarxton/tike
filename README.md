@@ -10,8 +10,8 @@ sell you today — with prices compared across shops.
 
 > Status: seven retailers ingested — Buzz Sneaker Station, Office Shoes, Sport Reality,
 > Sport Vision, Đak Sport, The Spot and Juventa Sport — currently over **10,000 in-stock
-> listings** across **9,000 products**, refreshed nightly. Search, size filtering,
-> cross-shop price comparison and tracked click-out are live. Not yet on a real domain,
+> listings** across **11,000 products**, refreshed nightly. Search, size filtering,
+> cross-shop price comparison, brand logos and tracked click-out are live. Not yet on a real domain,
 > and deliberately not indexable until it is.
 
 ## How it works
