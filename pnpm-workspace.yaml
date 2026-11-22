@@ -33,18 +33,29 @@ overrides:
   # Comes in through wrangler's miniflare, which is the local Workers simulator and never
   # ships; @tike/jobs already depends on a patched sharp directly, so this only drags the
   # one stale transitive copy up to meet it.
-  'sharp@<0.35.4': '>=0.35.4'
+  'sharp@<0.35.5': '>=0.35.5'
   # undici advisories through 7.29.0: TLS certificate validation bypass, WebSocket and
   # decompression DoS, cookie disclosure. Arrives through cheerio (crawler) and through
   # wrangler and OpenNext (build only). The crawler fetches with Node's own fetch, so this
   # copy is not on its request path, but cheerio still installs it.
-  'undici@>=7.0.0 <7.29.1': '^7.29.1'
+  'undici@>=7.0.0 <7.30.1': '^7.30.1'
   # brace-expansion and braces: recursion and quadratic-time DoS on crafted glob patterns.
   # Only eslint, typescript-eslint, eslint-config-next and the OpenNext build reach them,
   # and they only ever expand patterns written in this repository.
   'brace-expansion@<1.1.21': '^1.1.21'
   'brace-expansion@>=2.0.0 <2.1.7': '^2.1.7'
   'brace-expansion@>=4.0.0 <5.0.12': '^5.0.12'
+  # proxy-addr (IP spoofing) and body-parser (DoS): from @opennextjs/aws's Node server,
+  # which the Cloudflare Workers build does not run. Patched copies for completeness.
+  'proxy-addr@>=1.1.0 <2.0.8': '^2.0.8'
+  'body-parser@>=2.0.0 <2.4.0': '^2.4.0'
+  # zod: memory exhaustion validating oversized constants. Contracts depend on it directly
+  # (bumped); eslint-plugin-react-hooks brings its own copy.
+  'zod@<4.6.6': '^4.6.6'
+  # vite and source-map-js: dev-server file-existence leak and source-map DoS, reached only
+  # through vitest.
+  'vite@>=8.2.0 <=8.2.3': '^8.2.4'
+  'source-map-js@>=1.0.0 <1.2.2': '^1.2.2'
   # fast-uri: authority injection and host confusion in URI parsing. Reached only through
   # commitlint's config validation.
   'fast-uri@>=3.0.0 <3.1.8': '^3.1.8'
